@@ -1,0 +1,20 @@
+# Environment
+.env
+.env.*
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# IDE
+.idea/
+
+# Local data
+.chroma/
+
+# Frontend dependencies and build output
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
