@@ -86,10 +86,7 @@ textarea {
 }
 
 .panel--intro {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  min-height: 640px;
+  min-height: auto;
 }
 
 .hero__eyebrow {
@@ -103,7 +100,7 @@ textarea {
 
 .hero__title {
   margin: 0;
-  font-size: clamp(2.5rem, 5vw, 4.75rem);
+  font-size: clamp(1.875rem, 3.75vw, 3.56rem);
   line-height: 0.98;
   letter-spacing: -0.05em;
 }
@@ -288,7 +285,7 @@ textarea {
   }
 
   .hero__title {
-    font-size: 2.5rem;
+    font-size: 1.875rem;
   }
 
   .button {
