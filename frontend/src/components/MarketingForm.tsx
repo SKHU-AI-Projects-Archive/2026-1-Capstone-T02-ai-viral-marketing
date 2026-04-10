@@ -12,11 +12,28 @@ type FormState = {
 type MarketingFormProps = {
   form: FormState;
   loading: boolean;
+  imagePreviewUrl: string;
+  imageFileName: string;
+  imageMessage: string;
+  analyzingImage: boolean;
   onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
+  onImageChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onAnalyzeImage: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 };
 
-export function MarketingForm({ form, loading, onChange, onSubmit }: MarketingFormProps) {
+export function MarketingForm({
+  form,
+  loading,
+  imagePreviewUrl,
+  imageFileName,
+  imageMessage,
+  analyzingImage,
+  onChange,
+  onImageChange,
+  onAnalyzeImage,
+  onSubmit,
+}: MarketingFormProps) {
   const keywordHintId = useId();
 
   return (
@@ -31,6 +48,37 @@ export function MarketingForm({ form, loading, onChange, onSubmit }: MarketingFo
         maxLength={80}
         required
       />
+
+      <div className="image-input">
+        <label className="field">
+          <span className="field__label">제품 이미지</span>
+          <input
+            className="field__control"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={onImageChange}
+          />
+          <span className="field__hint">JPG, PNG, WEBP 파일만 가능하며 최대 4MB까지 업로드할 수 있습니다.</span>
+        </label>
+
+        {imagePreviewUrl ? (
+          <div className="image-preview">
+            <img src={imagePreviewUrl} alt={imageFileName ? `${imageFileName} 미리보기` : "제품 이미지 미리보기"} />
+          </div>
+        ) : null}
+
+        <div className="image-input__actions">
+          <button
+            className="button button--secondary"
+            type="button"
+            disabled={!imagePreviewUrl || analyzingImage}
+            onClick={onAnalyzeImage}
+          >
+            {analyzingImage ? "이미지 분석 중..." : "이미지 분석"}
+          </button>
+          {imageMessage ? <span className="field__hint">{imageMessage}</span> : null}
+        </div>
+      </div>
 
       <TextInput
         label="키워드"

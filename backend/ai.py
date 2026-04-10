@@ -1,5 +1,8 @@
+import base64
+import json
 import os
 from pathlib import Path
+from typing import Any
 
 import httpx
 from dotenv import load_dotenv
@@ -39,55 +42,18 @@ def _extract_error_message(response: httpx.Response) -> str:
     return response.reason_phrase or "Unknown Gemini API error."
 
 
-def generate_marketing_text(name: str, keywords: list[str], summary: str) -> str:
+def _get_gemini_config() -> tuple[str, str, float]:
     api_key = os.getenv("GEMINI_API_KEY")
     model = _normalize_model_name(os.getenv("GEMINI_MODEL", "gemini-2.5-flash"))
     timeout_seconds = float(os.getenv("GEMINI_TIMEOUT_SECONDS", "8"))
     if not api_key:
         raise ValueError("GEMINI_API_KEY environment variable is not set.")
+    return api_key, model, timeout_seconds
 
-    similar_examples = query_similar_examples(name=name, keywords=keywords, summary=summary, limit=3)
-    example_block = ""
-    if similar_examples:
-        formatted_examples = []
-        for index, example in enumerate(similar_examples, start=1):
-            formatted_examples.append(
-                f"""Example {index}
-- Product name: {example["name"]}
-- Keywords: {", ".join(example["keywords"])}
-- Summary: {example["summary"]}
-- Generated text: {example["generated_text"]}"""
-            )
-        example_block = "\n\nReference examples from previous successful generations:\n" + "\n\n".join(
-            formatted_examples
-        )
 
-    prompt = f"""Write short marketing copy for the product below.
-The tone should feel like a natural online community review, not an ad.
-
-Product name: {name}
-Keywords: {", ".join(keywords)}
-Summary: {summary}
-{example_block}
-
-Requirements:
-- Avoid exaggerated advertising language
-- Make it sound like a brief real-user impression
-- Use no more than 3 sentences
-- Write the output in Korean"""
-
+def _post_gemini(payload: dict[str, Any]) -> dict[str, Any]:
+    api_key, model, timeout_seconds = _get_gemini_config()
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-    payload = {
-        "contents": [
-            {
-                "parts": [
-                    {
-                        "text": prompt,
-                    }
-                ]
-            }
-        ]
-    }
 
     try:
         response = httpx.post(
@@ -100,7 +66,7 @@ Requirements:
             timeout=timeout_seconds,
         )
         response.raise_for_status()
-        data = response.json()
+        return response.json()
     except httpx.TimeoutException as exc:
         raise ValueError(
             "Gemini request timed out. Check network access or increase GEMINI_TIMEOUT_SECONDS."
@@ -126,6 +92,8 @@ Requirements:
             ) from exc
         raise ValueError(f"Gemini API error: status={status_code}. Provider said: {error_message}") from exc
 
+
+def _extract_generated_text(data: dict[str, Any]) -> str:
     try:
         parts = data["candidates"][0]["content"]["parts"]
         generated_text = "".join(part.get("text", "") for part in parts).strip()
@@ -134,6 +102,189 @@ Requirements:
 
     if not generated_text:
         raise ValueError("Gemini returned an empty response.")
+    return generated_text
+
+
+def _parse_json_object(text: str) -> dict[str, Any]:
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        lines = cleaned.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        cleaned = "\n".join(lines).strip()
+
+    try:
+        parsed = json.loads(cleaned)
+    except json.JSONDecodeError as exc:
+        raise ValueError("Gemini image analysis response was not valid JSON.") from exc
+    if not isinstance(parsed, dict):
+        raise ValueError("Gemini image analysis response must be a JSON object.")
+    return parsed
+
+
+def _as_string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item.strip() for item in value if isinstance(item, str) and item.strip()]
+
+
+def _normalize_image_analysis(data: dict[str, Any]) -> dict[str, Any]:
+    features = data.get("features")
+    if not isinstance(features, dict):
+        features = data
+
+    normalized_features = {
+        "category": str(features.get("category", "")).strip() if features.get("category") else "",
+        "colors": _as_string_list(features.get("colors")),
+        "materials": _as_string_list(features.get("materials")),
+        "style_keywords": _as_string_list(features.get("style_keywords")),
+        "use_cases": _as_string_list(features.get("use_cases")),
+        "target_audience": _as_string_list(features.get("target_audience")),
+        "selling_points": _as_string_list(features.get("selling_points")),
+        "detected_text": _as_string_list(features.get("detected_text")),
+        "uncertainties": _as_string_list(features.get("uncertainties")),
+    }
+
+    recommended_keywords = _as_string_list(data.get("recommendedKeywords"))
+    if not recommended_keywords:
+        recommended_keywords = [
+            keyword
+            for keyword in [
+                normalized_features["category"],
+                *normalized_features["colors"],
+                *normalized_features["materials"],
+                *normalized_features["style_keywords"],
+                *normalized_features["use_cases"],
+                *normalized_features["selling_points"],
+            ]
+            if keyword
+        ]
+
+    deduped_keywords = list(dict.fromkeys(recommended_keywords))[:12]
+    recommended_summary = str(data.get("recommendedSummary", "")).strip()
+    if not recommended_summary:
+        summary_parts = [
+            normalized_features["category"],
+            ", ".join(normalized_features["colors"]),
+            ", ".join(normalized_features["style_keywords"] or normalized_features["selling_points"]),
+        ]
+        recommended_summary = " / ".join(part for part in summary_parts if part)
+
+    return {
+        "recommendedKeywords": deduped_keywords,
+        "recommendedSummary": recommended_summary,
+        "features": normalized_features,
+    }
+
+
+def _format_image_analysis_block(image_analysis: dict[str, Any] | None) -> str:
+    if not image_analysis:
+        return ""
+
+    return "\n\nImage analysis context:\n" + json.dumps(image_analysis, ensure_ascii=False, indent=2)
+
+
+def analyze_product_image(image_bytes: bytes, media_type: str) -> dict[str, Any]:
+    if not image_bytes:
+        raise ValueError("Uploaded image is empty.")
+
+    prompt = """Analyze the product image to help generate Korean marketing copy.
+Extract only structured features visible in the image.
+Do not guess invisible performance, materials, specifications, brand claims, or usage results.
+Put uncertain or unverifiable information in uncertainties.
+Return JSON only, with this exact shape:
+{
+  "features": {
+    "category": "",
+    "colors": [],
+    "materials": [],
+    "style_keywords": [],
+    "use_cases": [],
+    "target_audience": [],
+    "selling_points": [],
+    "detected_text": [],
+    "uncertainties": []
+  },
+  "recommendedKeywords": [],
+  "recommendedSummary": ""
+}"""
+
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {"text": prompt},
+                    {
+                        "inline_data": {
+                            "mime_type": media_type,
+                            "data": base64.b64encode(image_bytes).decode("ascii"),
+                        }
+                    },
+                ]
+            }
+        ],
+        "generationConfig": {
+            "response_mime_type": "application/json",
+        },
+    }
+
+    generated_text = _extract_generated_text(_post_gemini(payload))
+    return _normalize_image_analysis(_parse_json_object(generated_text))
+
+
+def generate_marketing_text(
+    name: str,
+    keywords: list[str],
+    summary: str,
+    image_analysis: dict[str, Any] | None = None,
+) -> str:
+    similar_examples = query_similar_examples(name=name, keywords=keywords, summary=summary, limit=3)
+    example_block = ""
+    if similar_examples:
+        formatted_examples = []
+        for index, example in enumerate(similar_examples, start=1):
+            formatted_examples.append(
+                f"""Example {index}
+- Product name: {example["name"]}
+- Keywords: {", ".join(example["keywords"])}
+- Summary: {example["summary"]}
+- Generated text: {example["generated_text"]}"""
+            )
+        example_block = "\n\nReference examples from previous successful generations:\n" + "\n\n".join(
+            formatted_examples
+        )
+
+    prompt = f"""Write short marketing copy for the product below.
+The tone should feel like a natural online community review, not an ad.
+
+Product name: {name}
+Keywords: {", ".join(keywords)}
+Summary: {summary}
+{_format_image_analysis_block(image_analysis)}
+{example_block}
+
+Requirements:
+- Avoid exaggerated advertising language
+- Make it sound like a brief real-user impression
+- Reflect image analysis context only when it is relevant and do not invent unverifiable details
+- Use no more than 3 sentences
+- Write the output in Korean"""
+
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {
+                        "text": prompt,
+                    }
+                ]
+            }
+        ]
+    }
+
+    generated_text = _extract_generated_text(_post_gemini(payload))
 
     store_generated_example(
         name=name,

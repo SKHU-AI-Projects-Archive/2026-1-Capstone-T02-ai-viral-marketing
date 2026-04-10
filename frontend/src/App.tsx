@@ -17,7 +17,16 @@ type GenerateResponse = {
   generated_text: string;
 };
 
+type ImageAnalysis = {
+  recommendedKeywords: string[];
+  recommendedSummary: string;
+  features: Record<string, unknown>;
+};
+
 type RoutePath = "/" | "/login" | "/signup" | "/generate";
+
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 
 const INITIAL_FORM: FormState = {
   name: "",
@@ -41,6 +50,11 @@ export function App() {
   const [route, setRoute] = useState<RoutePath>(() => getRoutePath(window.location.pathname));
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
   const [result, setResult] = useState(INITIAL_RESULT);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState("");
+  const [imageMessage, setImageMessage] = useState("");
+  const [imageAnalysis, setImageAnalysis] = useState<ImageAnalysis | null>(null);
+  const [analyzingImage, setAnalyzingImage] = useState(false);
 
   useEffect(() => {
     function handlePopState() {
@@ -51,6 +65,14 @@ export function App() {
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (imagePreviewUrl) {
+        URL.revokeObjectURL(imagePreviewUrl);
+      }
+    };
+  }, [imagePreviewUrl]);
+
   function navigate(nextRoute: RoutePath) {
     window.history.pushState(null, "", nextRoute);
     setRoute(nextRoute);
@@ -59,6 +81,85 @@ export function App() {
   function handleChange(event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
     const { name, value } = event.target;
     setForm((current) => ({ ...current, [name]: value }));
+  }
+
+  function handleImageChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    setImageMessage("");
+    setImageAnalysis(null);
+
+    if (imagePreviewUrl) {
+      URL.revokeObjectURL(imagePreviewUrl);
+      setImagePreviewUrl("");
+    }
+
+    if (!file) {
+      setImageFile(null);
+      return;
+    }
+
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      setImageFile(null);
+      setImageMessage("JPG, PNG, WEBP 형식의 이미지만 업로드할 수 있습니다.");
+      event.target.value = "";
+      return;
+    }
+
+    if (file.size > MAX_IMAGE_BYTES) {
+      setImageFile(null);
+      setImageMessage("이미지 파일은 4MB 이하만 업로드할 수 있습니다.");
+      event.target.value = "";
+      return;
+    }
+
+    setImageFile(file);
+    setImagePreviewUrl(URL.createObjectURL(file));
+    setImageMessage("이미지를 선택했습니다. 분석 버튼을 눌러 추천값을 받아보세요.");
+  }
+
+  async function handleAnalyzeImage() {
+    if (!imageFile) {
+      setImageMessage("분석할 이미지를 먼저 선택해 주세요.");
+      return;
+    }
+
+    const body = new FormData();
+    body.append("file", imageFile);
+
+    setAnalyzingImage(true);
+    setImageMessage("이미지를 분석하는 중입니다.");
+
+    try {
+      const response = await fetch("/analyze-image", {
+        method: "POST",
+        body,
+      });
+      const data = (await response.json()) as Partial<ImageAnalysis> & { detail?: string };
+
+      if (!response.ok) {
+        throw new Error(data.detail || "이미지 분석에 실패했습니다.");
+      }
+
+      const recommendedKeywords = data.recommendedKeywords ?? [];
+      const recommendedSummary = data.recommendedSummary ?? "";
+      const nextAnalysis: ImageAnalysis = {
+        recommendedKeywords,
+        recommendedSummary,
+        features: data.features ?? {},
+      };
+
+      setImageAnalysis(nextAnalysis);
+      setForm((current) => ({
+        ...current,
+        keywords: recommendedKeywords.length ? recommendedKeywords.join(", ") : current.keywords,
+        summary: recommendedSummary || current.summary,
+      }));
+      setImageMessage("이미지 분석 결과를 키워드와 제품 요약에 반영했습니다.");
+    } catch (error) {
+      setImageMessage(error instanceof Error ? error.message : "예기치 않은 이미지 분석 오류가 발생했습니다.");
+    } finally {
+      setAnalyzingImage(false);
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -71,6 +172,7 @@ export function App() {
         .map((keyword) => keyword.trim())
         .filter(Boolean),
       summary: form.summary.trim(),
+      ...(imageAnalysis ? { imageAnalysis } : {}),
     };
 
     if (!payload.name || !payload.keywords.length || !payload.summary) {
@@ -131,7 +233,13 @@ export function App() {
           <MarketingForm
             form={form}
             loading={result.status === "loading"}
+            imagePreviewUrl={imagePreviewUrl}
+            imageFileName={imageFile?.name ?? ""}
+            imageMessage={imageMessage}
+            analyzingImage={analyzingImage}
             onChange={handleChange}
+            onImageChange={handleImageChange}
+            onAnalyzeImage={handleAnalyzeImage}
             onSubmit={handleSubmit}
           />
           <ResultPanel status={result.status} content={result.content} />
