@@ -53,8 +53,6 @@ def generate_copy(payload: GenerateRequest) -> GenerateResponse:
 
 @app.get("/{full_path:path}")
 def read_frontend_app(full_path: str):
-    if full_path.startswith("generate"):
-        return PlainTextResponse("Not Found", status_code=404)
     if not (FRONTEND_DIST_DIR / "index.html").exists():
         return PlainTextResponse(
             "Frontend build not found. Run `npm install` and `npm run build` in the frontend directory.",
