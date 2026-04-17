@@ -13,8 +13,11 @@ __pycache__/
 
 # Local data
 .chroma/
+.tmp_*
 
-# Frontend dependencies and build output
+# Node dependencies and build output
+node_modules/
 frontend/node_modules/
 frontend/dist/
+*.tsbuildinfo
 frontend/*.tsbuildinfo

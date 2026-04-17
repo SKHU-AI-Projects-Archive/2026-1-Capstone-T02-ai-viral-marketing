@@ -1,22 +1,14 @@
-from pathlib import Path
-
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import PlainTextResponse
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 
 from backend.ai import analyze_product_image, generate_marketing_text
 from backend.schemas import AnalyzeImageResponse, GenerateRequest, GenerateResponse
 
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-FRONTEND_SRC_DIR = BASE_DIR / "frontend"
-FRONTEND_DIST_DIR = FRONTEND_SRC_DIR / "dist"
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_IMAGE_BYTES = 4 * 1024 * 1024
 
-app = FastAPI(title="OVMS MVP")
-app.mount("/assets", StaticFiles(directory=FRONTEND_DIST_DIR / "assets", check_dir=False), name="assets")
+app = FastAPI(title="OVMS AI Service")
 
 
 def _model_to_dict(value):
@@ -27,22 +19,21 @@ def _model_to_dict(value):
     return value.dict()
 
 
-@app.get("/")
-def read_index():
-    if not (FRONTEND_DIST_DIR / "index.html").exists():
-        return PlainTextResponse(
-            "Frontend build not found. Run `npm install` and `npm run build` in the frontend directory.",
-            status_code=503,
-        )
-    return FileResponse(FRONTEND_DIST_DIR / "index.html")
+@app.get("/health")
+def healthcheck():
+    return {"status": "ok"}
 
 
-@app.get("/favicon.ico")
-def read_favicon() -> FileResponse:
-    return FileResponse(FRONTEND_DIST_DIR / "favicon.svg", media_type="image/svg+xml")
+@app.get("/", response_class=PlainTextResponse)
+def read_root() -> str:
+    return (
+        "이 FastAPI 서버는 내부 AI API만 제공합니다.\n"
+        "`npm start`로 Node 서버를 실행한 뒤 http://127.0.0.1:3000 으로 접속해 주세요.\n"
+        "이 FastAPI 서버는 AI 백엔드로 계속 실행되어 있어야 합니다."
+    )
 
 
-@app.post("/generate", response_model=GenerateResponse)
+@app.post("/internal/generate", response_model=GenerateResponse)
 def generate_copy(payload: GenerateRequest) -> GenerateResponse:
     try:
         generated_text = generate_marketing_text(
@@ -56,13 +47,13 @@ def generate_copy(payload: GenerateRequest) -> GenerateResponse:
     except Exception as exc:
         raise HTTPException(
             status_code=500,
-            detail="Failed to generate marketing text.",
+            detail="마케팅 문구 생성에 실패했습니다.",
         ) from exc
 
     return GenerateResponse(generated_text=generated_text)
 
 
-@app.post("/analyze-image", response_model=AnalyzeImageResponse)
+@app.post("/internal/analyze-image", response_model=AnalyzeImageResponse)
 async def analyze_image(file: UploadFile = File(...)) -> AnalyzeImageResponse:
     if file.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(
@@ -72,7 +63,7 @@ async def analyze_image(file: UploadFile = File(...)) -> AnalyzeImageResponse:
 
     image_bytes = await file.read()
     if not image_bytes:
-        raise HTTPException(status_code=400, detail="이미지 파일이 비어 있습니다.")
+        raise HTTPException(status_code=400, detail="업로드된 이미지 파일이 비어 있습니다.")
     if len(image_bytes) > MAX_IMAGE_BYTES:
         raise HTTPException(status_code=413, detail="이미지 파일은 4MB 이하만 업로드할 수 있습니다.")
 
@@ -81,16 +72,6 @@ async def analyze_image(file: UploadFile = File(...)) -> AnalyzeImageResponse:
     except ValueError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail="Failed to analyze product image.") from exc
+        raise HTTPException(status_code=500, detail="이미지 분석에 실패했습니다.") from exc
 
     return AnalyzeImageResponse(**analysis)
-
-
-@app.get("/{full_path:path}")
-def read_frontend_app(full_path: str):
-    if not (FRONTEND_DIST_DIR / "index.html").exists():
-        return PlainTextResponse(
-            "Frontend build not found. Run `npm install` and `npm run build` in the frontend directory.",
-            status_code=503,
-        )
-    return FileResponse(FRONTEND_DIST_DIR / "index.html")

@@ -98,6 +98,12 @@ textarea {
   font-weight: 700;
 }
 
+.app-nav__link--active {
+  border-color: rgba(15, 118, 110, 0.38);
+  background: rgba(15, 118, 110, 0.12);
+  color: var(--accent-strong);
+}
+
 .panel {
   padding: 32px;
   border: 1px solid var(--line);
@@ -161,6 +167,18 @@ textarea {
 .panel--workspace {
   display: grid;
   gap: 18px;
+}
+
+.workspace-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.workspace-header__title {
+  margin: 0;
+  font-size: 1.25rem;
 }
 
 .home-actions {
@@ -419,6 +437,10 @@ textarea {
 
   .auth-panel__header {
     align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .workspace-header {
     flex-direction: column;
   }
 }

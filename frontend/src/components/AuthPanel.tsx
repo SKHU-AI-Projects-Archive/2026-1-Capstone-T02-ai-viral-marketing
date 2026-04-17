@@ -4,10 +4,23 @@ import { TextInput } from "./TextInput";
 
 export type AuthMode = "login" | "signup";
 
+export type AuthSubmitPayload = {
+  mode: AuthMode;
+  name: string;
+  email: string;
+  password: string;
+};
+
 type AuthForm = {
   name: string;
   email: string;
   password: string;
+};
+
+type AuthUser = {
+  id: string;
+  name: string;
+  email: string;
 };
 
 const INITIAL_AUTH_FORM: AuthForm = {
@@ -18,20 +31,29 @@ const INITIAL_AUTH_FORM: AuthForm = {
 
 type AuthPanelProps = {
   initialMode?: AuthMode;
+  user: AuthUser | null;
+  busy: boolean;
+  message: string;
   onModeChange?: (mode: AuthMode) => void;
+  onSubmit: (payload: AuthSubmitPayload) => Promise<void>;
+  onLogout: () => Promise<void>;
 };
 
-export function AuthPanel({ initialMode = "login", onModeChange }: AuthPanelProps) {
+export function AuthPanel({
+  initialMode = "login",
+  user,
+  busy,
+  message,
+  onModeChange,
+  onSubmit,
+  onLogout,
+}: AuthPanelProps) {
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [form, setForm] = useState<AuthForm>(INITIAL_AUTH_FORM);
-  const [userEmail, setUserEmail] = useState("");
-  const [message, setMessage] = useState("");
-
-  const isSignup = mode === "signup";
 
   useEffect(() => {
     setMode(initialMode);
-    setMessage("");
+    setForm(INITIAL_AUTH_FORM);
   }, [initialMode]);
 
   function handleChange(event: ChangeEvent<HTMLInputElement>) {
@@ -41,58 +63,42 @@ export function AuthPanel({ initialMode = "login", onModeChange }: AuthPanelProp
 
   function handleModeChange(nextMode: AuthMode) {
     setMode(nextMode);
-    setMessage("");
+    setForm(INITIAL_AUTH_FORM);
     onModeChange?.(nextMode);
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const email = form.email.trim();
-    const name = form.name.trim();
-    const password = form.password.trim();
+    await onSubmit({
+      mode,
+      name: form.name.trim(),
+      email: form.email.trim(),
+      password: form.password,
+    });
 
-    if (isSignup && !name) {
-      setMessage("이름을 입력해 주세요.");
-      return;
-    }
-
-    if (!email || !password) {
-      setMessage("이메일과 비밀번호를 입력해 주세요.");
-      return;
-    }
-
-    if (password.length < 6) {
-      setMessage("비밀번호는 6자 이상으로 입력해 주세요.");
-      return;
-    }
-
-    setUserEmail(email);
-    setForm(INITIAL_AUTH_FORM);
-    setMessage(isSignup ? "회원가입이 완료되었습니다." : "로그인되었습니다.");
-  }
-
-  function handleLogout() {
-    setUserEmail("");
-    setMessage("로그아웃되었습니다.");
+    setForm((current) => ({
+      ...current,
+      password: "",
+    }));
   }
 
   return (
-    <section className="auth-panel" aria-label="회원가입 및 로그인">
+    <section className="auth-panel" aria-label="인증">
       <div className="auth-panel__header">
         <div>
-          <p className="auth-panel__eyebrow">Account</p>
-          <h2>회원가입 및 로그인</h2>
+          <p className="auth-panel__eyebrow">계정</p>
+          <h2>{user ? "로그인 상태" : "회원가입 및 로그인"}</h2>
         </div>
-        {userEmail ? (
-          <button className="button button--secondary" type="button" onClick={handleLogout}>
+        {user ? (
+          <button className="button button--secondary" type="button" onClick={() => void onLogout()}>
             로그아웃
           </button>
         ) : null}
       </div>
 
-      {userEmail ? (
-        <p className="auth-panel__status">{userEmail} 계정으로 이용 중입니다.</p>
+      {user ? (
+        <p className="auth-panel__status">{user.email} 계정으로 로그인되어 있습니다.</p>
       ) : (
         <>
           <div className="auth-panel__tabs" role="tablist" aria-label="인증 방식">
@@ -104,7 +110,7 @@ export function AuthPanel({ initialMode = "login", onModeChange }: AuthPanelProp
               로그인
             </button>
             <button
-              className={`auth-panel__tab${isSignup ? " auth-panel__tab--active" : ""}`}
+              className={`auth-panel__tab${mode === "signup" ? " auth-panel__tab--active" : ""}`}
               type="button"
               onClick={() => handleModeChange("signup")}
             >
@@ -112,8 +118,8 @@ export function AuthPanel({ initialMode = "login", onModeChange }: AuthPanelProp
             </button>
           </div>
 
-          <form className="auth-form" onSubmit={handleSubmit}>
-            {isSignup ? (
+          <form className="auth-form" onSubmit={(event) => void handleSubmit(event)}>
+            {mode === "signup" ? (
               <TextInput
                 label="이름"
                 name="name"
@@ -122,6 +128,7 @@ export function AuthPanel({ initialMode = "login", onModeChange }: AuthPanelProp
                 value={form.name}
                 onChange={handleChange}
                 autoComplete="name"
+                required
               />
             ) : null}
 
@@ -140,15 +147,16 @@ export function AuthPanel({ initialMode = "login", onModeChange }: AuthPanelProp
               label="비밀번호"
               name="password"
               type="password"
-              placeholder="6자 이상"
+              placeholder="6자 이상 입력"
               value={form.password}
               onChange={handleChange}
-              autoComplete={isSignup ? "new-password" : "current-password"}
+              autoComplete={mode === "signup" ? "new-password" : "current-password"}
+              minLength={6}
               required
             />
 
-            <button className="button" type="submit">
-              {isSignup ? "회원가입" : "로그인"}
+            <button className="button" type="submit" disabled={busy}>
+              {busy ? "처리 중..." : mode === "signup" ? "회원가입" : "로그인"}
             </button>
           </form>
         </>

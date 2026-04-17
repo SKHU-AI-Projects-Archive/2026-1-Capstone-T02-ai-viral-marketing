@@ -1,11 +1,24 @@
 import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 
-import { AuthPanel } from "./components/AuthPanel";
+import { AuthPanel, AuthSubmitPayload } from "./components/AuthPanel";
 import { MarketingForm } from "./components/MarketingForm";
 import { ResultPanel } from "./components/ResultPanel";
 import { SectionTitle } from "./components/SectionTitle";
 
 type ResultState = "idle" | "loading" | "success" | "error";
+type AuthStatus = "loading" | "authenticated" | "guest";
+type RoutePath = "/" | "/login" | "/signup" | "/generate";
+
+type AuthUser = {
+  id: string;
+  name: string;
+  email: string;
+};
+
+type SessionResponse = {
+  authenticated: boolean;
+  user?: AuthUser;
+};
 
 type FormState = {
   name: string;
@@ -15,15 +28,15 @@ type FormState = {
 
 type GenerateResponse = {
   generated_text: string;
+  detail?: string;
 };
 
 type ImageAnalysis = {
   recommendedKeywords: string[];
   recommendedSummary: string;
   features: Record<string, unknown>;
+  detail?: string;
 };
-
-type RoutePath = "/" | "/login" | "/signup" | "/generate";
 
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
@@ -43,11 +56,16 @@ function getRoutePath(pathname: string): RoutePath {
   if (pathname === "/login" || pathname === "/signup" || pathname === "/generate") {
     return pathname;
   }
+
   return "/";
 }
 
 export function App() {
   const [route, setRoute] = useState<RoutePath>(() => getRoutePath(window.location.pathname));
+  const [authStatus, setAuthStatus] = useState<AuthStatus>("loading");
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [authMessage, setAuthMessage] = useState("");
+  const [authSubmitting, setAuthSubmitting] = useState(false);
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
   const [result, setResult] = useState(INITIAL_RESULT);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -57,6 +75,8 @@ export function App() {
   const [analyzingImage, setAnalyzingImage] = useState(false);
 
   useEffect(() => {
+    void loadSession();
+
     function handlePopState() {
       setRoute(getRoutePath(window.location.pathname));
     }
@@ -66,6 +86,13 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    if (authStatus === "guest" && route === "/generate") {
+      navigate("/login");
+      setAuthMessage("문구 생성 페이지는 로그인 후 이용할 수 있습니다.");
+    }
+  }, [authStatus, route]);
+
+  useEffect(() => {
     return () => {
       if (imagePreviewUrl) {
         URL.revokeObjectURL(imagePreviewUrl);
@@ -73,9 +100,42 @@ export function App() {
     };
   }, [imagePreviewUrl]);
 
+  async function loadSession() {
+    setAuthStatus("loading");
+
+    try {
+      const response = await fetch("/api/auth/session", {
+        credentials: "include",
+      });
+      const data = (await response.json()) as SessionResponse;
+
+      if (data.authenticated && data.user) {
+        setAuthUser(data.user);
+        setAuthStatus("authenticated");
+        return;
+      }
+    } catch (error) {
+      setAuthMessage("현재 세션 정보를 불러오지 못했습니다.");
+    }
+
+    setAuthUser(null);
+    setAuthStatus("guest");
+  }
+
   function navigate(nextRoute: RoutePath) {
     window.history.pushState(null, "", nextRoute);
     setRoute(nextRoute);
+  }
+
+  function openGeneratePage() {
+    if (authStatus !== "authenticated") {
+      setAuthMessage("문구 생성 페이지는 로그인 후 이용할 수 있습니다.");
+      navigate("/login");
+      return;
+    }
+
+    setAuthMessage("");
+    navigate("/generate");
   }
 
   function handleChange(event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
@@ -114,7 +174,7 @@ export function App() {
 
     setImageFile(file);
     setImagePreviewUrl(URL.createObjectURL(file));
-    setImageMessage("이미지를 선택했습니다. 분석 버튼을 눌러 추천값을 받아보세요.");
+    setImageMessage("이미지를 선택했습니다. 분석 버튼을 누르면 키워드와 요약을 추천받을 수 있습니다.");
   }
 
   async function handleAnalyzeImage() {
@@ -130,33 +190,42 @@ export function App() {
     setImageMessage("이미지를 분석하는 중입니다.");
 
     try {
-      const response = await fetch("/analyze-image", {
+      const response = await fetch("/api/analyze-image", {
         method: "POST",
         body,
+        credentials: "include",
       });
-      const data = (await response.json()) as Partial<ImageAnalysis> & { detail?: string };
+      const data = (await response.json()) as ImageAnalysis;
+
+      if (response.status === 401) {
+        setAuthUser(null);
+        setAuthStatus("guest");
+        setAuthMessage("세션이 만료되었습니다. 다시 로그인해 주세요.");
+        navigate("/login");
+        return;
+      }
 
       if (!response.ok) {
         throw new Error(data.detail || "이미지 분석에 실패했습니다.");
       }
 
-      const recommendedKeywords = data.recommendedKeywords ?? [];
-      const recommendedSummary = data.recommendedSummary ?? "";
       const nextAnalysis: ImageAnalysis = {
-        recommendedKeywords,
-        recommendedSummary,
+        recommendedKeywords: data.recommendedKeywords ?? [],
+        recommendedSummary: data.recommendedSummary ?? "",
         features: data.features ?? {},
       };
 
       setImageAnalysis(nextAnalysis);
       setForm((current) => ({
         ...current,
-        keywords: recommendedKeywords.length ? recommendedKeywords.join(", ") : current.keywords,
-        summary: recommendedSummary || current.summary,
+        keywords: nextAnalysis.recommendedKeywords.length
+          ? nextAnalysis.recommendedKeywords.join(", ")
+          : current.keywords,
+        summary: nextAnalysis.recommendedSummary || current.summary,
       }));
       setImageMessage("이미지 분석 결과를 키워드와 제품 요약에 반영했습니다.");
     } catch (error) {
-      setImageMessage(error instanceof Error ? error.message : "예기치 않은 이미지 분석 오류가 발생했습니다.");
+      setImageMessage(error instanceof Error ? error.message : "이미지 분석 중 예기치 않은 오류가 발생했습니다.");
     } finally {
       setAnalyzingImage(false);
     }
@@ -177,27 +246,36 @@ export function App() {
 
     if (!payload.name || !payload.keywords.length || !payload.summary) {
       setResult({
-        status: "error" as ResultState,
-        content: "마케팅 문구를 생성하기 전에 모든 항목을 입력해 주세요.",
+        status: "error",
+        content: "마케팅 문구를 생성하려면 모든 항목을 입력해 주세요.",
       });
       return;
     }
 
     setResult({
       status: "loading",
-      content: "Gemini로 마케팅 문구를 생성하는 중입니다.",
+      content: "마케팅 문구를 생성하는 중입니다.",
     });
 
     try {
-      const response = await fetch("/generate", {
+      const response = await fetch("/api/generate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: "include",
         body: JSON.stringify(payload),
       });
 
-      const data = (await response.json()) as Partial<GenerateResponse> & { detail?: string };
+      const data = (await response.json()) as GenerateResponse;
+
+      if (response.status === 401) {
+        setAuthUser(null);
+        setAuthStatus("guest");
+        setAuthMessage("세션이 만료되었습니다. 다시 로그인해 주세요.");
+        navigate("/login");
+        return;
+      }
 
       if (!response.ok) {
         throw new Error(data.detail || "마케팅 문구 생성에 실패했습니다.");
@@ -210,8 +288,53 @@ export function App() {
     } catch (error) {
       setResult({
         status: "error",
-        content: error instanceof Error ? error.message : "예기치 않은 요청 오류가 발생했습니다.",
+        content: error instanceof Error ? error.message : "문구 생성 중 예기치 않은 오류가 발생했습니다.",
       });
+    }
+  }
+
+  async function handleAuthSubmit(payload: AuthSubmitPayload) {
+    setAuthSubmitting(true);
+    setAuthMessage("");
+
+    try {
+      const endpoint = payload.mode === "signup" ? "/api/auth/signup" : "/api/auth/login";
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+      const data = (await response.json()) as { detail?: string; user?: AuthUser };
+
+      if (!response.ok || !data.user) {
+        throw new Error(data.detail || "인증에 실패했습니다.");
+      }
+
+      setAuthUser(data.user);
+      setAuthStatus("authenticated");
+      setAuthMessage(payload.mode === "signup" ? "회원가입이 완료되었습니다. 바로 로그인되었습니다." : "로그인되었습니다.");
+      navigate("/generate");
+    } catch (error) {
+      setAuthMessage(error instanceof Error ? error.message : "인증에 실패했습니다.");
+    } finally {
+      setAuthSubmitting(false);
+    }
+  }
+
+  async function handleLogout() {
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      });
+    } finally {
+      setAuthUser(null);
+      setAuthStatus("guest");
+      setAuthMessage("로그아웃되었습니다.");
+      navigate("/login");
     }
   }
 
@@ -221,15 +344,46 @@ export function App() {
         <article className="panel">
           <AuthPanel
             initialMode={route === "/signup" ? "signup" : "login"}
-            onModeChange={(mode) => navigate(mode === "signup" ? "/signup" : "/login")}
+            user={authUser}
+            busy={authSubmitting}
+            message={authMessage}
+            onModeChange={(mode) => {
+              setAuthMessage("");
+              navigate(mode === "signup" ? "/signup" : "/login");
+            }}
+            onSubmit={handleAuthSubmit}
+            onLogout={handleLogout}
           />
         </article>
       );
     }
 
     if (route === "/generate") {
+      if (authStatus === "loading") {
+        return (
+          <article className="panel">
+            <p className="auth-panel__message">세션을 확인하는 중입니다.</p>
+          </article>
+        );
+      }
+
       return (
         <article className="panel panel--workspace">
+          <div className="workspace-header">
+            <div>
+              <p className="auth-panel__eyebrow">작업 공간</p>
+              <h2 className="workspace-header__title">마케팅 문구 생성</h2>
+              <p className="auth-panel__message">
+                {authUser ? `${authUser.email} 계정으로 로그인되어 있습니다.` : "로그인이 필요합니다."}
+              </p>
+            </div>
+            {authUser ? (
+              <button className="button button--secondary" type="button" onClick={() => void handleLogout()}>
+                로그아웃
+              </button>
+            ) : null}
+          </div>
+
           <MarketingForm
             form={form}
             loading={result.status === "loading"}
@@ -252,13 +406,13 @@ export function App() {
         <article className="panel panel--intro">
           <SectionTitle
             eyebrow="AI 바이럴 카피 랩"
-            title="제품 정보를 마케팅 문구로 빠르게 변환해 보세요."
-            description="제품명, 핵심 키워드, 제품 설명을 입력하면 바로 사용할 수 있는 마케팅 문구를 생성합니다."
+            title="제품 정보를 마케팅 문구로 빠르게 바꿔보세요."
+            description="회원가입 또는 로그인 후 보호된 작업 공간에서 문구 생성과 이미지 기반 추천 기능을 이용할 수 있습니다."
           />
         </article>
 
         <article className="panel home-actions">
-          <button className="button" type="button" onClick={() => navigate("/generate")}>
+          <button className="button" type="button" onClick={openGeneratePage}>
             문구 생성하기
           </button>
           <button className="button button--secondary" type="button" onClick={() => navigate("/login")}>
@@ -282,15 +436,23 @@ export function App() {
           <button className="app-nav__link" type="button" onClick={() => navigate("/")}>
             홈
           </button>
-          <button className="app-nav__link" type="button" onClick={() => navigate("/generate")}>
+          <button className="app-nav__link" type="button" onClick={openGeneratePage}>
             문구 생성
           </button>
-          <button className="app-nav__link" type="button" onClick={() => navigate("/login")}>
-            로그인
-          </button>
-          <button className="app-nav__link" type="button" onClick={() => navigate("/signup")}>
-            회원가입
-          </button>
+          {authUser ? (
+            <button className="app-nav__link app-nav__link--active" type="button" onClick={() => navigate("/generate")}>
+              {authUser.name}
+            </button>
+          ) : (
+            <>
+              <button className="app-nav__link" type="button" onClick={() => navigate("/login")}>
+                로그인
+              </button>
+              <button className="app-nav__link" type="button" onClick={() => navigate("/signup")}>
+                회원가입
+              </button>
+            </>
+          )}
         </nav>
 
         {renderRoute()}

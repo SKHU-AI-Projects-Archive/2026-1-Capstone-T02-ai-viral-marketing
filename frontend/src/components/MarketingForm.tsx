@@ -58,7 +58,7 @@ export function MarketingForm({
             accept="image/jpeg,image/png,image/webp"
             onChange={onImageChange}
           />
-          <span className="field__hint">JPG, PNG, WEBP 파일만 가능하며 최대 4MB까지 업로드할 수 있습니다.</span>
+          <span className="field__hint">JPG, PNG, WEBP 형식만 업로드할 수 있으며 최대 4MB까지 지원합니다.</span>
         </label>
 
         {imagePreviewUrl ? (
@@ -97,7 +97,7 @@ export function MarketingForm({
         label="제품 요약"
         name="summary"
         rows={6}
-        placeholder="예: 국내 생산 스테인리스 보틀"
+        placeholder="예: 국내 생산 스테인리스 텀블러로 보온성이 뛰어난 제품"
         value={form.summary}
         onChange={onChange}
         maxLength={400}
