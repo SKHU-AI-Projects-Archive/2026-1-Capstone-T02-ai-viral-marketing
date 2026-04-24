@@ -12,6 +12,9 @@ from backend.vector_store import query_similar_examples, store_generated_example
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(dotenv_path=BASE_DIR / ".env", override=True)
+DEFAULT_GEMINI_TIMEOUT_SECONDS = 110.0
+MIN_GENERATE_TIMEOUT_SECONDS = 15.0
+MIN_IMAGE_ANALYSIS_TIMEOUT_SECONDS = 30.0
 
 
 def _normalize_model_name(model: str) -> str:
@@ -42,17 +45,34 @@ def _extract_error_message(response: httpx.Response) -> str:
     return response.reason_phrase or "Unknown Gemini API error."
 
 
-def _get_gemini_config() -> tuple[str, str, float]:
+def _get_env_float(name: str, default: float) -> float:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    return float(raw_value)
+
+
+def _get_gemini_config() -> tuple[str, str]:
     api_key = os.getenv("GEMINI_API_KEY")
     model = _normalize_model_name(os.getenv("GEMINI_MODEL", "gemini-2.5-flash"))
-    timeout_seconds = float(os.getenv("GEMINI_TIMEOUT_SECONDS", "8"))
     if not api_key:
         raise ValueError("GEMINI_API_KEY environment variable is not set.")
-    return api_key, model, timeout_seconds
+    return api_key, model
 
 
-def _post_gemini(payload: dict[str, Any]) -> dict[str, Any]:
-    api_key, model, timeout_seconds = _get_gemini_config()
+def _get_gemini_timeout_seconds(*, image_analysis: bool = False) -> float:
+    base_timeout = _get_env_float("GEMINI_TIMEOUT_SECONDS", DEFAULT_GEMINI_TIMEOUT_SECONDS)
+    if image_analysis:
+        image_timeout = _get_env_float("GEMINI_IMAGE_TIMEOUT_SECONDS", base_timeout)
+        return max(image_timeout, MIN_IMAGE_ANALYSIS_TIMEOUT_SECONDS)
+
+    generate_timeout = _get_env_float("GEMINI_GENERATE_TIMEOUT_SECONDS", base_timeout)
+    return max(generate_timeout, MIN_GENERATE_TIMEOUT_SECONDS)
+
+
+def _post_gemini(payload: dict[str, Any], *, image_analysis: bool = False) -> dict[str, Any]:
+    api_key, model = _get_gemini_config()
+    timeout_seconds = _get_gemini_timeout_seconds(image_analysis=image_analysis)
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
     try:
@@ -68,8 +88,9 @@ def _post_gemini(payload: dict[str, Any]) -> dict[str, Any]:
         response.raise_for_status()
         return response.json()
     except httpx.TimeoutException as exc:
+        timeout_env_hint = "GEMINI_IMAGE_TIMEOUT_SECONDS" if image_analysis else "GEMINI_GENERATE_TIMEOUT_SECONDS"
         raise ValueError(
-            "Gemini request timed out. Check network access or increase GEMINI_TIMEOUT_SECONDS."
+            f"Gemini request timed out. Check network access or increase {timeout_env_hint}."
         ) from exc
     except httpx.ConnectError as exc:
         raise ValueError("Failed to connect to Gemini API. Check network/proxy settings.") from exc
@@ -230,7 +251,7 @@ Return JSON only, with this exact shape:
         },
     }
 
-    generated_text = _extract_generated_text(_post_gemini(payload))
+    generated_text = _extract_generated_text(_post_gemini(payload, image_analysis=True))
     return _normalize_image_analysis(_parse_json_object(generated_text))
 
 
