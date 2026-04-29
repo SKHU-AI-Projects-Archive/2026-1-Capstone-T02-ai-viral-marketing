@@ -326,7 +326,7 @@ async function bootstrap(): Promise<void> {
     }
   });
 
-  app.get("/generate", requireAuthPage, (_req: Request, res: Response) => {
+  app.get(["/generate", "/result"], requireAuthPage, (_req: Request, res: Response) => {
     sendFrontendIndex(res);
   });
 
@@ -340,7 +340,7 @@ async function bootstrap(): Promise<void> {
       return;
     }
 
-    if (req.path === "/generate") {
+    if (req.path === "/generate" || req.path === "/result") {
       requireAuthPage(req, res, () => sendFrontendIndex(res));
       return;
     }

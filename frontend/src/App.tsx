@@ -1,4 +1,5 @@
 import { ChangeEvent, FormEvent, useEffect, useState } from "react";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
 import { AuthPanel, AuthSubmitPayload } from "./components/AuthPanel";
 import { MarketingForm } from "./components/MarketingForm";
@@ -7,7 +8,6 @@ import { SectionTitle } from "./components/SectionTitle";
 
 type ResultState = "idle" | "loading" | "success" | "error";
 type AuthStatus = "loading" | "authenticated" | "guest";
-type RoutePath = "/" | "/login" | "/signup" | "/generate";
 
 type AuthUser = {
   id: string;
@@ -40,6 +40,7 @@ type ImageAnalysis = {
 
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+const PROTECTED_PATHS = ["/generate", "/result"];
 
 const INITIAL_FORM: FormState = {
   name: "",
@@ -52,16 +53,10 @@ const INITIAL_RESULT = {
   content: "아직 생성된 마케팅 문구가 없습니다.",
 };
 
-function getRoutePath(pathname: string): RoutePath {
-  if (pathname === "/login" || pathname === "/signup" || pathname === "/generate") {
-    return pathname;
-  }
-
-  return "/";
-}
-
 export function App() {
-  const [route, setRoute] = useState<RoutePath>(() => getRoutePath(window.location.pathname));
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const [authStatus, setAuthStatus] = useState<AuthStatus>("loading");
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authMessage, setAuthMessage] = useState("");
@@ -76,21 +71,14 @@ export function App() {
 
   useEffect(() => {
     void loadSession();
-
-    function handlePopState() {
-      setRoute(getRoutePath(window.location.pathname));
-    }
-
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
   useEffect(() => {
-    if (authStatus === "guest" && route === "/generate") {
+    if (authStatus === "guest" && PROTECTED_PATHS.includes(location.pathname)) {
+      setAuthMessage("이 페이지는 로그인 후 이용할 수 있습니다.");
       navigate("/login");
-      setAuthMessage("문구 생성 페이지는 로그인 후 이용할 수 있습니다.");
     }
-  }, [authStatus, route]);
+  }, [authStatus, location.pathname]);
 
   useEffect(() => {
     return () => {
@@ -120,11 +108,6 @@ export function App() {
 
     setAuthUser(null);
     setAuthStatus("guest");
-  }
-
-  function navigate(nextRoute: RoutePath) {
-    window.history.pushState(null, "", nextRoute);
-    setRoute(nextRoute);
   }
 
   function openGeneratePage() {
@@ -249,6 +232,7 @@ export function App() {
         status: "error",
         content: "마케팅 문구를 생성하려면 모든 항목을 입력해 주세요.",
       });
+      navigate("/result");
       return;
     }
 
@@ -256,6 +240,7 @@ export function App() {
       status: "loading",
       content: "마케팅 문구를 생성하는 중입니다.",
     });
+    navigate("/result");
 
     try {
       const response = await fetch("/api/generate", {
@@ -338,69 +323,7 @@ export function App() {
     }
   }
 
-  function renderRoute() {
-    if (route === "/login" || route === "/signup") {
-      return (
-        <article className="panel">
-          <AuthPanel
-            initialMode={route === "/signup" ? "signup" : "login"}
-            user={authUser}
-            busy={authSubmitting}
-            message={authMessage}
-            onModeChange={(mode) => {
-              setAuthMessage("");
-              navigate(mode === "signup" ? "/signup" : "/login");
-            }}
-            onSubmit={handleAuthSubmit}
-            onLogout={handleLogout}
-          />
-        </article>
-      );
-    }
-
-    if (route === "/generate") {
-      if (authStatus === "loading") {
-        return (
-          <article className="panel">
-            <p className="auth-panel__message">세션을 확인하는 중입니다.</p>
-          </article>
-        );
-      }
-
-      return (
-        <article className="panel panel--workspace">
-          <div className="workspace-header">
-            <div>
-              <p className="auth-panel__eyebrow">작업 공간</p>
-              <h2 className="workspace-header__title">마케팅 문구 생성</h2>
-              <p className="auth-panel__message">
-                {authUser ? `${authUser.email} 계정으로 로그인되어 있습니다.` : "로그인이 필요합니다."}
-              </p>
-            </div>
-            {authUser ? (
-              <button className="button button--secondary" type="button" onClick={() => void handleLogout()}>
-                로그아웃
-              </button>
-            ) : null}
-          </div>
-
-          <MarketingForm
-            form={form}
-            loading={result.status === "loading"}
-            imagePreviewUrl={imagePreviewUrl}
-            imageFileName={imageFile?.name ?? ""}
-            imageMessage={imageMessage}
-            analyzingImage={analyzingImage}
-            onChange={handleChange}
-            onImageChange={handleImageChange}
-            onAnalyzeImage={handleAnalyzeImage}
-            onSubmit={handleSubmit}
-          />
-          <ResultPanel status={result.status} content={result.content} />
-        </article>
-      );
-    }
-
+  function renderHome() {
     return (
       <>
         <article className="panel panel--intro">
@@ -426,6 +349,95 @@ export function App() {
     );
   }
 
+  function renderAuth(mode: "login" | "signup") {
+    return (
+      <article className="panel">
+        <AuthPanel
+          initialMode={mode}
+          user={authUser}
+          busy={authSubmitting}
+          message={authMessage}
+          onModeChange={(nextMode) => {
+            setAuthMessage("");
+            navigate(nextMode === "signup" ? "/signup" : "/login");
+          }}
+          onSubmit={handleAuthSubmit}
+          onLogout={handleLogout}
+        />
+      </article>
+    );
+  }
+
+  function renderGenerate() {
+    if (authStatus === "loading") {
+      return (
+        <article className="panel">
+          <p className="auth-panel__message">세션을 확인하는 중입니다.</p>
+        </article>
+      );
+    }
+
+    return (
+      <article className="panel panel--workspace">
+        <div className="workspace-header">
+          <div>
+            <p className="auth-panel__eyebrow">작업 공간</p>
+            <h2 className="workspace-header__title">마케팅 문구 생성</h2>
+            <p className="auth-panel__message">
+              {authUser ? `${authUser.email} 계정으로 로그인되어 있습니다.` : "로그인이 필요합니다."}
+            </p>
+          </div>
+          {authUser ? (
+            <button className="button button--secondary" type="button" onClick={() => void handleLogout()}>
+              로그아웃
+            </button>
+          ) : null}
+        </div>
+
+        <MarketingForm
+          form={form}
+          loading={result.status === "loading"}
+          imagePreviewUrl={imagePreviewUrl}
+          imageFileName={imageFile?.name ?? ""}
+          imageMessage={imageMessage}
+          analyzingImage={analyzingImage}
+          onChange={handleChange}
+          onImageChange={handleImageChange}
+          onAnalyzeImage={handleAnalyzeImage}
+          onSubmit={handleSubmit}
+        />
+      </article>
+    );
+  }
+
+  function renderResult() {
+    if (authStatus === "loading") {
+      return (
+        <article className="panel">
+          <p className="auth-panel__message">세션을 확인하는 중입니다.</p>
+        </article>
+      );
+    }
+
+    return (
+      <article className="panel panel--workspace">
+        <div className="workspace-header">
+          <div>
+            <p className="auth-panel__eyebrow">결과</p>
+            <h2 className="workspace-header__title">생성된 마케팅 문구</h2>
+          </div>
+          <button className="button button--secondary" type="button" onClick={() => navigate("/generate")}>
+            생성 페이지로
+          </button>
+        </div>
+
+        <ResultPanel status={result.status} content={result.content} />
+      </article>
+    );
+  }
+
+  const showResultTab = result.status !== "idle";
+
   return (
     <main className="page-shell">
       <div className="backdrop backdrop--one" />
@@ -439,6 +451,11 @@ export function App() {
           <button className="app-nav__link" type="button" onClick={openGeneratePage}>
             문구 생성
           </button>
+          {showResultTab ? (
+            <button className="app-nav__link" type="button" onClick={() => navigate("/result")}>
+              생성 결과
+            </button>
+          ) : null}
           {authUser ? (
             <button className="app-nav__link app-nav__link--active" type="button" onClick={() => navigate("/generate")}>
               {authUser.name}
@@ -455,7 +472,14 @@ export function App() {
           )}
         </nav>
 
-        {renderRoute()}
+        <Routes>
+          <Route path="/" element={renderHome()} />
+          <Route path="/login" element={renderAuth("login")} />
+          <Route path="/signup" element={renderAuth("signup")} />
+          <Route path="/generate" element={renderGenerate()} />
+          <Route path="/result" element={renderResult()} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </section>
     </main>
   );
