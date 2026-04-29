@@ -181,6 +181,12 @@ textarea {
   font-size: 1.25rem;
 }
 
+.workspace-header__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .home-actions {
   display: flex;
   flex-wrap: wrap;

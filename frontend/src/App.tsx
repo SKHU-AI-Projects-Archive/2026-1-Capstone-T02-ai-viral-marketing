@@ -1,5 +1,5 @@
 import { ChangeEvent, FormEvent, useEffect, useState } from "react";
-import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { AuthPanel, AuthSubmitPayload } from "./components/AuthPanel";
 import { MarketingForm } from "./components/MarketingForm";
@@ -28,6 +28,17 @@ type FormState = {
 
 type GenerateResponse = {
   generated_text: string;
+  id?: string;
+  detail?: string;
+};
+
+type GenerationFetchResponse = {
+  id: string;
+  name: string;
+  keywords: string[];
+  summary: string;
+  generated_text: string;
+  createdAt: string;
   detail?: string;
 };
 
@@ -40,7 +51,10 @@ type ImageAnalysis = {
 
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
-const PROTECTED_PATHS = ["/generate", "/result"];
+
+function isProtectedPath(pathname: string): boolean {
+  return pathname === "/generate" || pathname === "/result" || pathname.startsWith("/result/");
+}
 
 const INITIAL_FORM: FormState = {
   name: "",
@@ -53,6 +67,74 @@ const INITIAL_RESULT = {
   content: "아직 생성된 마케팅 문구가 없습니다.",
 };
 
+function SharedResultPage({ authStatus }: { authStatus: AuthStatus }) {
+  const { id } = useParams<{ id: string }>();
+  const [status, setStatus] = useState<ResultState>("loading");
+  const [content, setContent] = useState("생성 결과를 불러오는 중입니다.");
+  const [meta, setMeta] = useState<{ name: string; createdAt: string } | null>(null);
+
+  useEffect(() => {
+    if (authStatus !== "authenticated" || !id) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const response = await fetch(`/api/generations/${id}`, { credentials: "include" });
+        const data = (await response.json()) as GenerationFetchResponse;
+
+        if (cancelled) return;
+
+        if (!response.ok) {
+          setStatus("error");
+          setContent(data.detail || "생성 결과를 불러오지 못했습니다.");
+          return;
+        }
+
+        setStatus("success");
+        setContent(data.generated_text || "");
+        setMeta({ name: data.name, createdAt: data.createdAt });
+      } catch (_error) {
+        if (cancelled) return;
+        setStatus("error");
+        setContent("생성 결과 조회 중 오류가 발생했습니다.");
+      }
+    }
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id, authStatus]);
+
+  if (authStatus !== "authenticated") {
+    return (
+      <article className="panel">
+        <p className="auth-panel__message">세션을 확인하는 중입니다.</p>
+      </article>
+    );
+  }
+
+  return (
+    <article className="panel panel--workspace">
+      <div className="workspace-header">
+        <div>
+          <p className="auth-panel__eyebrow">공유 결과</p>
+          <h2 className="workspace-header__title">{meta?.name || "생성된 마케팅 문구"}</h2>
+          {meta?.createdAt ? (
+            <p className="auth-panel__message">{new Date(meta.createdAt).toLocaleString()}</p>
+          ) : null}
+        </div>
+      </div>
+
+      <ResultPanel status={status} content={content} />
+    </article>
+  );
+}
+
 export function App() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -63,6 +145,7 @@ export function App() {
   const [authSubmitting, setAuthSubmitting] = useState(false);
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
   const [result, setResult] = useState(INITIAL_RESULT);
+  const [lastResultId, setLastResultId] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState("");
   const [imageMessage, setImageMessage] = useState("");
@@ -74,7 +157,7 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (authStatus === "guest" && PROTECTED_PATHS.includes(location.pathname)) {
+    if (authStatus === "guest" && isProtectedPath(location.pathname)) {
       setAuthMessage("이 페이지는 로그인 후 이용할 수 있습니다.");
       navigate("/login");
     }
@@ -240,6 +323,7 @@ export function App() {
       status: "loading",
       content: "마케팅 문구를 생성하는 중입니다.",
     });
+    setLastResultId(null);
     navigate("/result");
 
     try {
@@ -270,6 +354,9 @@ export function App() {
         status: "success",
         content: data.generated_text || "",
       });
+      if (data.id) {
+        setLastResultId(data.id);
+      }
     } catch (error) {
       setResult({
         status: "error",
@@ -426,9 +513,20 @@ export function App() {
             <p className="auth-panel__eyebrow">결과</p>
             <h2 className="workspace-header__title">생성된 마케팅 문구</h2>
           </div>
-          <button className="button button--secondary" type="button" onClick={() => navigate("/generate")}>
-            생성 페이지로
-          </button>
+          <div className="workspace-header__actions">
+            {result.status === "success" && lastResultId ? (
+              <button
+                className="button button--secondary"
+                type="button"
+                onClick={() => window.open(`/result/${lastResultId}`, "_blank", "noopener")}
+              >
+                새 창에서 보기
+              </button>
+            ) : null}
+            <button className="button button--secondary" type="button" onClick={() => navigate("/generate")}>
+              생성 페이지로
+            </button>
+          </div>
         </div>
 
         <ResultPanel status={result.status} content={result.content} />
@@ -478,6 +576,7 @@ export function App() {
           <Route path="/signup" element={renderAuth("signup")} />
           <Route path="/generate" element={renderGenerate()} />
           <Route path="/result" element={renderResult()} />
+          <Route path="/result/:id" element={<SharedResultPage authStatus={authStatus} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </section>

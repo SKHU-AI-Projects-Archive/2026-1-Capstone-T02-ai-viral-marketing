@@ -24,6 +24,16 @@ type UserRecord = {
   createdAt: Date;
 };
 
+type GenerationRecord = {
+  userId: ObjectId;
+  name: string;
+  keywords: string[];
+  summary: string;
+  imageAnalysis: unknown;
+  generatedText: string;
+  createdAt: Date;
+};
+
 const app = express();
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -38,9 +48,11 @@ const sessionSecret = process.env.SESSION_SECRET || "replace-this-session-secret
 const fastApiBaseUrl = (process.env.FASTAPI_BASE_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
 const usersDbName = "users";
 const usersCollectionName = "user";
+const generationsCollectionName = "generations";
 const frontendDistPath = path.join(process.cwd(), "frontend", "dist");
 
 let usersCollection: Collection<UserRecord>;
+let generationsCollection: Collection<GenerationRecord>;
 
 function frontendBuildExists(): boolean {
   return fs.existsSync(path.join(frontendDistPath, "index.html"));
@@ -143,6 +155,11 @@ async function bootstrap(): Promise<void> {
   const database = mongoClient.db(usersDbName);
   usersCollection = database.collection<UserRecord>(usersCollectionName);
   await usersCollection.createIndex({ email: 1 }, { unique: true });
+  generationsCollection = database.collection<GenerationRecord>(generationsCollectionName);
+  await generationsCollection.createIndex({ userId: 1, createdAt: -1 });
+  console.log(
+    `[bootstrap] generations collection ready: ${usersDbName}.${generationsCollectionName}`
+  );
 
   app.use(express.json());
   app.use(
@@ -289,18 +306,89 @@ async function bootstrap(): Promise<void> {
   });
 
   app.post("/api/generate", requireAuth, async (req: Request, res: Response) => {
+    let upstreamResponse: globalThis.Response;
     try {
-      const upstreamResponse = await fetch(`${fastApiBaseUrl}/internal/generate`, {
+      upstreamResponse = await fetch(`${fastApiBaseUrl}/internal/generate`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(req.body),
       });
-
-      await relayJsonResponse(upstreamResponse, res);
-    } catch (_error) {
+    } catch (error) {
+      console.error("[generate] FastAPI fetch failed:", error);
       res.status(502).json({ detail: "AI 생성 서버에 연결하지 못했습니다." });
+      return;
+    }
+
+    const contentType = upstreamResponse.headers.get("content-type") || "";
+    if (!upstreamResponse.ok || !contentType.includes("application/json")) {
+      await relayJsonResponse(upstreamResponse, res);
+      return;
+    }
+
+    const data = (await upstreamResponse.json()) as { generated_text?: string };
+    const generatedText = data.generated_text || "";
+    const sessionUser = req.session.user!;
+
+    try {
+      const insertResult = await generationsCollection.insertOne({
+        userId: new ObjectId(sessionUser.id),
+        name: String(req.body?.name || ""),
+        keywords: Array.isArray(req.body?.keywords) ? req.body.keywords : [],
+        summary: String(req.body?.summary || ""),
+        imageAnalysis: req.body?.imageAnalysis ?? null,
+        generatedText,
+        createdAt: new Date(),
+      });
+
+      console.log(
+        `[generate] saved generation ${insertResult.insertedId.toString()} for user ${sessionUser.id}`
+      );
+
+      res.status(upstreamResponse.status).json({
+        generated_text: generatedText,
+        id: insertResult.insertedId.toString(),
+      });
+    } catch (error) {
+      console.error("[generate] Mongo insert failed:", error);
+      res.status(500).json({
+        generated_text: generatedText,
+        detail: "결과 저장에 실패했습니다. 생성된 텍스트는 표시됩니다.",
+      });
+    }
+  });
+
+  app.get("/api/generations/:id", requireAuth, async (req: Request, res: Response) => {
+    const rawId = String(req.params.id || "");
+    if (!ObjectId.isValid(rawId)) {
+      res.status(400).json({ detail: "잘못된 생성 결과 ID 입니다." });
+      return;
+    }
+
+    try {
+      const record = await generationsCollection.findOne({ _id: new ObjectId(rawId) });
+      if (!record) {
+        res.status(404).json({ detail: "생성 결과를 찾을 수 없습니다." });
+        return;
+      }
+
+      const sessionUser = req.session.user!;
+      if (record.userId.toString() !== sessionUser.id) {
+        res.status(403).json({ detail: "해당 결과에 접근할 권한이 없습니다." });
+        return;
+      }
+
+      res.json({
+        id: record._id.toString(),
+        name: record.name,
+        keywords: record.keywords,
+        summary: record.summary,
+        generated_text: record.generatedText,
+        createdAt: record.createdAt,
+      });
+    } catch (_error) {
+      res.status(500).json({ detail: "생성 결과 조회 중 오류가 발생했습니다." });
     }
   });
 
@@ -326,7 +414,7 @@ async function bootstrap(): Promise<void> {
     }
   });
 
-  app.get(["/generate", "/result"], requireAuthPage, (_req: Request, res: Response) => {
+  app.get(["/generate", "/result", "/result/:id"], requireAuthPage, (_req: Request, res: Response) => {
     sendFrontendIndex(res);
   });
 
@@ -340,7 +428,7 @@ async function bootstrap(): Promise<void> {
       return;
     }
 
-    if (req.path === "/generate" || req.path === "/result") {
+    if (req.path === "/generate" || req.path === "/result" || req.path.startsWith("/result/")) {
       requireAuthPage(req, res, () => sendFrontendIndex(res));
       return;
     }
