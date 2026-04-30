@@ -277,8 +277,8 @@ def generate_marketing_text(
             formatted_examples
         )
 
-    prompt = f"""Write short marketing copy for the product below.
-The tone should feel like a natural online community review, not an ad.
+    prompt = f"""Write a Korean product blog post in the style of Naver / Tistory promotional reviews.
+The post must read like a real user's experience review, not an obvious ad.
 
 Product name: {name}
 Keywords: {", ".join(keywords)}
@@ -286,12 +286,22 @@ Summary: {summary}
 {_format_image_analysis_block(image_analysis)}
 {example_block}
 
-Requirements:
-- Avoid exaggerated advertising language
-- Make it sound like a brief real-user impression
-- Reflect image analysis context only when it is relevant and do not invent unverifiable details
-- Use no more than 3 sentences
-- Write the output in Korean"""
+Output format (Markdown only, no code fences, no preamble):
+- Start with a single H1 line: a catchy, click-friendly title (no clickbait, no all-caps)
+- 200~300 Korean characters of intro paragraph that hooks the reader
+- Insert exactly one image right after the intro using this exact placeholder:
+  ![{name} 제품 이미지](image://product)
+- Then 2~4 H2 sections. Each section: short paragraph(s), use bullet lists when comparing or listing features
+- Optionally insert one more image between H2 sections using the same placeholder
+- End with a soft CTA paragraph (구매 / 방문 / 더 알아보기 식)
+
+Style requirements:
+- Friendly first-person review tone in Korean (존댓말, "저는", "써보니")
+- Use light emoji sparingly (0~3 total, never in headings)
+- Avoid exaggerated advertising language ("최고", "무조건", "강력 추천 100%")
+- Reflect image analysis context only when it is relevant; do not invent unverifiable specs, brand claims, or performance numbers
+- Total length around 700~1200 Korean characters
+- Do not include the original keyword list verbatim — weave them naturally"""
 
     payload = {
         "contents": [
@@ -302,7 +312,11 @@ Requirements:
                     }
                 ]
             }
-        ]
+        ],
+        "generationConfig": {
+            "maxOutputTokens": 8192,
+            "temperature": 0.85,
+        },
     }
 
     generated_text = _extract_generated_text(_post_gemini(payload))

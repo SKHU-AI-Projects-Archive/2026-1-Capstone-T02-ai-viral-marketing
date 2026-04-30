@@ -146,6 +146,7 @@ export function App() {
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
   const [result, setResult] = useState(INITIAL_RESULT);
   const [lastResultId, setLastResultId] = useState<string | null>(null);
+  const [resultImageUrl, setResultImageUrl] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState("");
   const [imageMessage, setImageMessage] = useState("");
@@ -162,14 +163,6 @@ export function App() {
       navigate("/login");
     }
   }, [authStatus, location.pathname]);
-
-  useEffect(() => {
-    return () => {
-      if (imagePreviewUrl) {
-        URL.revokeObjectURL(imagePreviewUrl);
-      }
-    };
-  }, [imagePreviewUrl]);
 
   async function loadSession() {
     setAuthStatus("loading");
@@ -215,7 +208,9 @@ export function App() {
     setImageAnalysis(null);
 
     if (imagePreviewUrl) {
-      URL.revokeObjectURL(imagePreviewUrl);
+      if (imagePreviewUrl !== resultImageUrl) {
+        URL.revokeObjectURL(imagePreviewUrl);
+      }
       setImagePreviewUrl("");
     }
 
@@ -324,6 +319,7 @@ export function App() {
       content: "마케팅 문구를 생성하는 중입니다.",
     });
     setLastResultId(null);
+    setResultImageUrl(imagePreviewUrl);
     navigate("/result");
 
     try {
@@ -529,7 +525,11 @@ export function App() {
           </div>
         </div>
 
-        <ResultPanel status={result.status} content={result.content} />
+        <ResultPanel
+          status={result.status}
+          content={result.content}
+          imageUrl={resultImageUrl || undefined}
+        />
       </article>
     );
   }

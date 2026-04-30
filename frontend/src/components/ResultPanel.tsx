@@ -1,8 +1,12 @@
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+
 type ResultState = "idle" | "loading" | "success" | "error";
 
 type ResultPanelProps = {
   status: ResultState;
   content: string;
+  imageUrl?: string;
 };
 
 const TITLE_MAP: Record<ResultState, string> = {
@@ -19,14 +23,39 @@ const BADGE_MAP: Record<ResultState, string> = {
   error: "오류",
 };
 
-export function ResultPanel({ status, content }: ResultPanelProps) {
+const PLACEHOLDER_PATTERN = /image:\/\/[^)\s]+/g;
+const PLACEHOLDER_LINE_PATTERN = /^!\[[^\]]*\]\(image:\/\/[^)]+\)\s*$/gm;
+
+function substituteImages(markdown: string, imageUrl?: string): string {
+  if (!imageUrl) {
+    return markdown.replace(PLACEHOLDER_LINE_PATTERN, "");
+  }
+  return markdown.replace(PLACEHOLDER_PATTERN, imageUrl);
+}
+
+function passthroughUrl(url: string): string {
+  return url;
+}
+
+export function ResultPanel({ status, content, imageUrl }: ResultPanelProps) {
+  const isMarkdown = status === "success";
+  const rendered = isMarkdown ? substituteImages(content, imageUrl) : content;
+
   return (
     <section className={`result result--${status}`} aria-live="polite">
       <div className="result__header">
         <h2>{TITLE_MAP[status]}</h2>
         <span className="result__badge">{BADGE_MAP[status]}</span>
       </div>
-      <p className="result__body">{content}</p>
+      <div className="result__body">
+        {isMarkdown ? (
+          <ReactMarkdown remarkPlugins={[remarkGfm]} urlTransform={passthroughUrl}>
+            {rendered}
+          </ReactMarkdown>
+        ) : (
+          <p>{rendered}</p>
+        )}
+      </div>
     </section>
   );
 }
