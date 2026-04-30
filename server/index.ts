@@ -24,11 +24,20 @@ type UserRecord = {
   createdAt: Date;
 };
 
+type Tone = "blog" | "coupang_review" | "community_comment";
+
+const ALLOWED_TONES: readonly Tone[] = ["blog", "coupang_review", "community_comment"];
+
+function normalizeTone(value: unknown): Tone {
+  return ALLOWED_TONES.includes(value as Tone) ? (value as Tone) : "blog";
+}
+
 type GenerationRecord = {
   userId: ObjectId;
   name: string;
   keywords: string[];
   summary: string;
+  tone: Tone;
   imageAnalysis: unknown;
   generatedText: string;
   createdAt: Date;
@@ -337,6 +346,7 @@ async function bootstrap(): Promise<void> {
         name: String(req.body?.name || ""),
         keywords: Array.isArray(req.body?.keywords) ? req.body.keywords : [],
         summary: String(req.body?.summary || ""),
+        tone: normalizeTone(req.body?.tone),
         imageAnalysis: req.body?.imageAnalysis ?? null,
         generatedText,
         createdAt: new Date(),

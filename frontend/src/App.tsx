@@ -20,10 +20,13 @@ type SessionResponse = {
   user?: AuthUser;
 };
 
+export type Tone = "blog" | "coupang_review" | "community_comment";
+
 type FormState = {
   name: string;
   keywords: string;
   summary: string;
+  tone: Tone;
 };
 
 type GenerateResponse = {
@@ -60,6 +63,7 @@ const INITIAL_FORM: FormState = {
   name: "",
   keywords: "",
   summary: "",
+  tone: "blog",
 };
 
 const INITIAL_RESULT = {
@@ -302,6 +306,7 @@ export function App() {
         .map((keyword) => keyword.trim())
         .filter(Boolean),
       summary: form.summary.trim(),
+      tone: form.tone,
       ...(imageAnalysis ? { imageAnalysis } : {}),
     };
 
@@ -485,6 +490,7 @@ export function App() {
           imageMessage={imageMessage}
           analyzingImage={analyzingImage}
           onChange={handleChange}
+          onToneChange={(tone) => setForm((current) => ({ ...current, tone }))}
           onImageChange={handleImageChange}
           onAnalyzeImage={handleAnalyzeImage}
           onSubmit={handleSubmit}

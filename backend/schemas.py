@@ -1,4 +1,9 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
+
+
+Tone = Literal["blog", "coupang_review", "community_comment"]
 
 
 class ImageFeatures(BaseModel):
@@ -23,6 +28,7 @@ class GenerateRequest(BaseModel):
     name: str = Field(..., min_length=1, description="Product name")
     keywords: list[str] = Field(..., min_length=1, description="Keyword list")
     summary: str = Field(..., min_length=1, description="Product summary")
+    tone: Tone = Field(default="blog", description="Output tone preset")
     imageAnalysis: ImageAnalysis | None = None
 
 

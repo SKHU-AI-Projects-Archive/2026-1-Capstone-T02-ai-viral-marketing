@@ -255,35 +255,20 @@ Return JSON only, with this exact shape:
     return _normalize_image_analysis(_parse_json_object(generated_text))
 
 
-def generate_marketing_text(
+def _build_blog_prompt(
     name: str,
     keywords: list[str],
     summary: str,
-    image_analysis: dict[str, Any] | None = None,
+    image_block: str,
+    example_block: str,
 ) -> str:
-    similar_examples = query_similar_examples(name=name, keywords=keywords, summary=summary, limit=3)
-    example_block = ""
-    if similar_examples:
-        formatted_examples = []
-        for index, example in enumerate(similar_examples, start=1):
-            formatted_examples.append(
-                f"""Example {index}
-- Product name: {example["name"]}
-- Keywords: {", ".join(example["keywords"])}
-- Summary: {example["summary"]}
-- Generated text: {example["generated_text"]}"""
-            )
-        example_block = "\n\nReference examples from previous successful generations:\n" + "\n\n".join(
-            formatted_examples
-        )
-
-    prompt = f"""Write a Korean product blog post in the style of Naver / Tistory promotional reviews.
+    return f"""Write a Korean product blog post in the style of Naver / Tistory promotional reviews.
 The post must read like a real user's experience review, not an obvious ad.
 
 Product name: {name}
 Keywords: {", ".join(keywords)}
 Summary: {summary}
-{_format_image_analysis_block(image_analysis)}
+{image_block}
 {example_block}
 
 Output format (Markdown only, no code fences, no preamble):
@@ -303,6 +288,116 @@ Style requirements:
 - Total length around 700~1200 Korean characters
 - Do not include the original keyword list verbatim — weave them naturally"""
 
+
+def _build_coupang_review_prompt(
+    name: str,
+    keywords: list[str],
+    summary: str,
+    image_block: str,
+    example_block: str,
+) -> str:
+    return f"""Write a short Korean product review in the style of Coupang Eats / Coupang product reviews.
+Tone is a real customer who just received and tried the product, posting honest impressions.
+
+Product name: {name}
+Keywords: {", ".join(keywords)}
+Summary: {summary}
+{image_block}
+{example_block}
+
+Output format (Markdown allowed but minimal):
+- No title heading. Start directly with the review paragraph.
+- 1~2 short paragraphs in 존댓말, total 100~300 Korean characters.
+- Insert exactly one image at the very top using this exact placeholder:
+  ![{name}](image://product)
+- Mention realistic review elements when relevant: 배송 빠르기, 포장 상태, 첫인상, 사용감, 재구매 의사.
+- Light emoji is encouraged (1~4, e.g. 😊 👍 ⭐). Never use heading syntax.
+
+Style requirements:
+- Honest user voice, slightly casual but polite (존댓말).
+- Avoid 광고스러운 표현 ("강추", "역대급", "무조건 사세요").
+- Do not invent specifications, brand claims, or comparisons that are not supported.
+- Do not output keyword list verbatim."""
+
+
+def _build_community_comment_prompt(
+    name: str,
+    keywords: list[str],
+    summary: str,
+    image_block: str,
+    example_block: str,
+) -> str:
+    return f"""Write a single Korean community comment that subtly promotes the product.
+Tone is an ordinary forum / 카페 / 댓글 user casually mentioning the product in conversation.
+The comment must NOT read like an advertisement.
+
+Product name: {name}
+Keywords: {", ".join(keywords)}
+Summary: {summary}
+{image_block}
+{example_block}
+
+Output format (plain text, no Markdown, no headings, no images):
+- 1~2 sentences only. Total 50~150 Korean characters.
+- Casual conversational Korean (반말 또는 가벼운 존댓말 둘 다 가능, 댓글 톤에 맞게).
+- Do not insert images or any image placeholder.
+- Optional: at most one light emoji (ㅋㅋ, ~, ㅠ 같은 표현도 허용).
+
+Style requirements:
+- Sound like a real person sharing personal experience, not a marketer.
+- Avoid 광고 표현 ("정말 추천", "강추", "꼭 사세요", "할인 중") and avoid hashtags / links.
+- Do not invent specifications or brand claims.
+- Do not output keyword list verbatim — weave naturally."""
+
+
+_TONE_BUILDERS = {
+    "blog": _build_blog_prompt,
+    "coupang_review": _build_coupang_review_prompt,
+    "community_comment": _build_community_comment_prompt,
+}
+
+_TONE_GENERATION_CONFIG: dict[str, dict[str, Any]] = {
+    "blog": {"maxOutputTokens": 8192, "temperature": 0.85},
+    "coupang_review": {"maxOutputTokens": 1024, "temperature": 0.9},
+    "community_comment": {"maxOutputTokens": 512, "temperature": 0.95},
+}
+
+
+def generate_marketing_text(
+    name: str,
+    keywords: list[str],
+    summary: str,
+    image_analysis: dict[str, Any] | None = None,
+    tone: str = "blog",
+) -> str:
+    builder = _TONE_BUILDERS.get(tone)
+    if builder is None:
+        raise ValueError(f"Unsupported tone: {tone}")
+
+    similar_examples = query_similar_examples(name=name, keywords=keywords, summary=summary, limit=3)
+    example_block = ""
+    if similar_examples:
+        formatted_examples = []
+        for index, example in enumerate(similar_examples, start=1):
+            formatted_examples.append(
+                f"""Example {index}
+- Product name: {example["name"]}
+- Keywords: {", ".join(example["keywords"])}
+- Summary: {example["summary"]}
+- Generated text: {example["generated_text"]}"""
+            )
+        example_block = "\n\nReference examples from previous successful generations:\n" + "\n\n".join(
+            formatted_examples
+        )
+
+    prompt = builder(
+        name=name,
+        keywords=keywords,
+        summary=summary,
+        image_block=_format_image_analysis_block(image_analysis),
+        example_block=example_block,
+    )
+
     payload = {
         "contents": [
             {
@@ -313,10 +408,7 @@ Style requirements:
                 ]
             }
         ],
-        "generationConfig": {
-            "maxOutputTokens": 8192,
-            "temperature": 0.85,
-        },
+        "generationConfig": _TONE_GENERATION_CONFIG[tone],
     }
 
     generated_text = _extract_generated_text(_post_gemini(payload))

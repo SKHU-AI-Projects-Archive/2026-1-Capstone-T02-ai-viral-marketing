@@ -41,6 +41,7 @@ def generate_copy(payload: GenerateRequest) -> GenerateResponse:
             keywords=payload.keywords,
             summary=payload.summary,
             image_analysis=_model_to_dict(payload.imageAnalysis),
+            tone=payload.tone,
         )
     except ValueError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc

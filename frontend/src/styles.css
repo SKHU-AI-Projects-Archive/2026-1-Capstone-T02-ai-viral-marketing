@@ -262,6 +262,63 @@ textarea {
   gap: 18px;
 }
 
+.tone-segment {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+.tone-segment > .field__label {
+  padding: 0;
+}
+
+.tone-segment__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px;
+  border-radius: 16px;
+  background: rgba(15, 118, 110, 0.06);
+}
+
+.tone-segment__option {
+  flex: 1 1 0;
+  min-width: 110px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: transparent;
+  transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.tone-segment__option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tone-segment__option:hover {
+  color: var(--ink);
+}
+
+.tone-segment__option--active {
+  background: #ffffff;
+  color: var(--ink);
+  box-shadow: 0 4px 12px rgba(15, 118, 110, 0.12);
+}
+
+.tone-segment__label {
+  user-select: none;
+}
+
 .image-input {
   display: grid;
   gap: 12px;

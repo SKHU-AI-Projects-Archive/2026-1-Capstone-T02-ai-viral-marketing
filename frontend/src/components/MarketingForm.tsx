@@ -1,5 +1,6 @@
 import { ChangeEvent, FormEvent, useId } from "react";
 
+import type { Tone } from "../App";
 import { TextArea } from "./TextArea";
 import { TextInput } from "./TextInput";
 
@@ -7,6 +8,7 @@ type FormState = {
   name: string;
   keywords: string;
   summary: string;
+  tone: Tone;
 };
 
 type MarketingFormProps = {
@@ -17,10 +19,17 @@ type MarketingFormProps = {
   imageMessage: string;
   analyzingImage: boolean;
   onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
+  onToneChange: (tone: Tone) => void;
   onImageChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onAnalyzeImage: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 };
+
+const TONE_OPTIONS: { value: Tone; label: string; description: string }[] = [
+  { value: "blog", label: "블로그", description: "네이버/티스토리 후기 톤, 700~1200자" },
+  { value: "coupang_review", label: "쿠팡 리뷰", description: "쇼핑몰 짧은 후기, 100~300자" },
+  { value: "community_comment", label: "댓글 홍보", description: "자연스러운 커뮤니티 댓글, 50~150자" },
+];
 
 export function MarketingForm({
   form,
@@ -30,14 +39,44 @@ export function MarketingForm({
   imageMessage,
   analyzingImage,
   onChange,
+  onToneChange,
   onImageChange,
   onAnalyzeImage,
   onSubmit,
 }: MarketingFormProps) {
   const keywordHintId = useId();
+  const toneGroupId = useId();
+  const activeTone = TONE_OPTIONS.find((option) => option.value === form.tone) ?? TONE_OPTIONS[0];
 
   return (
     <form className="composer" onSubmit={onSubmit}>
+      <fieldset className="tone-segment" aria-labelledby={toneGroupId}>
+        <legend id={toneGroupId} className="field__label">
+          톤 선택
+        </legend>
+        <div className="tone-segment__options" role="radiogroup">
+          {TONE_OPTIONS.map((option) => {
+            const checked = option.value === form.tone;
+            return (
+              <label
+                key={option.value}
+                className={`tone-segment__option${checked ? " tone-segment__option--active" : ""}`}
+              >
+                <input
+                  type="radio"
+                  name="tone"
+                  value={option.value}
+                  checked={checked}
+                  onChange={() => onToneChange(option.value)}
+                />
+                <span className="tone-segment__label">{option.label}</span>
+              </label>
+            );
+          })}
+        </div>
+        <span className="field__hint">{activeTone.description}</span>
+      </fieldset>
+
       <TextInput
         label="제품명"
         name="name"
