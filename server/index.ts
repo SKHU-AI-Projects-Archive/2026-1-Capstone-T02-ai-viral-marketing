@@ -55,6 +55,7 @@ const port = Number(process.env.PORT || 3000);
 const mongoUrl = (process.env.MONGO_DB || "").trim();
 const sessionSecret = process.env.SESSION_SECRET || "replace-this-session-secret";
 const fastApiBaseUrl = (process.env.FASTAPI_BASE_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
+const frontendDevUrl = (process.env.FRONTEND_DEV_URL || "http://127.0.0.1:5173").replace(/\/+$/, "");
 const usersDbName = "users";
 const usersCollectionName = "user";
 const generationsCollectionName = "generations";
@@ -67,13 +68,22 @@ function frontendBuildExists(): boolean {
   return fs.existsSync(path.join(frontendDistPath, "index.html"));
 }
 
+function shouldUseFrontendDevServer(): boolean {
+  return process.env.NODE_ENV !== "production";
+}
+
 function sendFrontendUnavailable(res: Response): void {
   res.status(503).type("text/plain").send(
     "프론트엔드 빌드를 찾을 수 없습니다. frontend 디렉터리에서 `npm install` 후 `npm run build`를 실행해 주세요."
   );
 }
 
-function sendFrontendIndex(res: Response): void {
+function sendFrontendEntry(req: Request, res: Response): void {
+  if (shouldUseFrontendDevServer()) {
+    res.redirect(`${frontendDevUrl}${req.originalUrl}`);
+    return;
+  }
+
   if (!frontendBuildExists()) {
     sendFrontendUnavailable(res);
     return;
@@ -424,12 +434,12 @@ async function bootstrap(): Promise<void> {
     }
   });
 
-  app.get(["/generate", "/result", "/result/:id"], requireAuthPage, (_req: Request, res: Response) => {
-    sendFrontendIndex(res);
+  app.get(["/generate", "/result", "/result/:id"], requireAuthPage, (req: Request, res: Response) => {
+    sendFrontendEntry(req, res);
   });
 
-  app.get(["/", "/login", "/signup"], (_req: Request, res: Response) => {
-    sendFrontendIndex(res);
+  app.get(["/", "/login", "/signup"], (req: Request, res: Response) => {
+    sendFrontendEntry(req, res);
   });
 
   app.get("*", (req: Request, res: Response) => {
@@ -439,11 +449,11 @@ async function bootstrap(): Promise<void> {
     }
 
     if (req.path === "/generate" || req.path === "/result" || req.path.startsWith("/result/")) {
-      requireAuthPage(req, res, () => sendFrontendIndex(res));
+      requireAuthPage(req, res, () => sendFrontendEntry(req, res));
       return;
     }
 
-    sendFrontendIndex(res);
+    sendFrontendEntry(req, res);
   });
 
   app.listen(port, () => {
