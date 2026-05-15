@@ -32,6 +32,10 @@ type FormState = {
 type GenerateResponse = {
   generated_text: string;
   id?: string;
+  tone?: Tone;
+  saveSource?: "auto";
+  createdAt?: string;
+  updatedAt?: string;
   detail?: string;
 };
 
@@ -40,8 +44,20 @@ type GenerationFetchResponse = {
   name: string;
   keywords: string[];
   summary: string;
+  tone: Tone;
   generated_text: string;
+  saveSource?: "auto";
   createdAt: string;
+  updatedAt?: string;
+  detail?: string;
+};
+
+type GenerationListItem = Omit<GenerationFetchResponse, "generated_text" | "detail"> & {
+  preview: string;
+};
+
+type GenerationListResponse = {
+  items: GenerationListItem[];
   detail?: string;
 };
 
@@ -56,7 +72,11 @@ const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 
 function isProtectedPath(pathname: string): boolean {
-  return pathname === "/generate" || pathname === "/result" || pathname.startsWith("/result/");
+  return (
+    pathname === "/generate" ||
+    pathname === "/generations" ||
+    pathname.startsWith("/generations/")
+  );
 }
 
 const INITIAL_FORM: FormState = {
@@ -68,14 +88,16 @@ const INITIAL_FORM: FormState = {
 
 const INITIAL_RESULT = {
   status: "idle" as ResultState,
-  content: "아직 생성된 마케팅 문구가 없습니다.",
+  content: "",
 };
 
 function SharedResultPage({ authStatus }: { authStatus: AuthStatus }) {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [status, setStatus] = useState<ResultState>("loading");
-  const [content, setContent] = useState("생성 결과를 불러오는 중입니다.");
-  const [meta, setMeta] = useState<{ name: string; createdAt: string } | null>(null);
+  const [content, setContent] = useState("저장된 생성 결과를 불러오는 중입니다.");
+  const [meta, setMeta] = useState<GenerationFetchResponse | null>(null);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
 
   useEffect(() => {
     if (authStatus !== "authenticated" || !id) {
@@ -93,13 +115,14 @@ function SharedResultPage({ authStatus }: { authStatus: AuthStatus }) {
 
         if (!response.ok) {
           setStatus("error");
-          setContent(data.detail || "생성 결과를 불러오지 못했습니다.");
+          setContent(data.detail || "저장된 생성 결과를 불러오지 못했습니다.");
           return;
         }
 
         setStatus("success");
         setContent(data.generated_text || "");
-        setMeta({ name: data.name, createdAt: data.createdAt });
+        setMeta(data);
+        setCopyState("idle");
       } catch (_error) {
         if (cancelled) return;
         setStatus("error");
@@ -122,21 +145,149 @@ function SharedResultPage({ authStatus }: { authStatus: AuthStatus }) {
     );
   }
 
+  async function handleCopyResult() {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopyState("copied");
+    } catch (_error) {
+      setCopyState("error");
+    }
+  }
+
   return (
     <article className="panel panel--workspace">
       <div className="workspace-header">
         <div>
-          <p className="auth-panel__eyebrow">공유 결과</p>
+          <p className="auth-panel__eyebrow">저장 결과</p>
           <h2 className="workspace-header__title">{meta?.name || "생성된 마케팅 문구"}</h2>
           {meta?.createdAt ? (
             <p className="auth-panel__message">{new Date(meta.createdAt).toLocaleString()}</p>
           ) : null}
         </div>
+        <div className="workspace-header__actions">
+          <button className="button button--secondary" type="button" onClick={() => navigate("/generations")}>
+            저장 목록
+          </button>
+          <button className="button button--secondary" type="button" onClick={() => navigate("/generate")}>
+            새 글 생성
+          </button>
+        </div>
       </div>
 
-      <ResultPanel status={status} content={content} />
+      {copyState !== "idle" ? (
+        <p className="auth-panel__message">{copyState === "copied" ? "복사되었습니다." : "복사에 실패했습니다."}</p>
+      ) : null}
+
+      <ResultPanel
+        status={status}
+        content={content}
+        copyLabel={copyState === "copied" ? "복사됨" : "복사"}
+        onCopy={status === "success" && content ? handleCopyResult : undefined}
+      />
     </article>
   );
+}
+
+function SavedGenerationsPage({ authStatus }: { authStatus: AuthStatus }) {
+  const navigate = useNavigate();
+  const [status, setStatus] = useState<ResultState>("loading");
+  const [items, setItems] = useState<GenerationListItem[]>([]);
+  const [message, setMessage] = useState("저장된 생성 결과를 불러오는 중입니다.");
+
+  useEffect(() => {
+    if (authStatus !== "authenticated") {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const response = await fetch("/api/generations?limit=50", { credentials: "include" });
+        const data = (await response.json()) as GenerationListResponse;
+
+        if (cancelled) return;
+
+        if (!response.ok) {
+          setStatus("error");
+          setMessage(data.detail || "저장 목록을 불러오지 못했습니다.");
+          return;
+        }
+
+        setItems(data.items || []);
+        setStatus("success");
+        setMessage("");
+      } catch (_error) {
+        if (cancelled) return;
+        setStatus("error");
+        setMessage("저장 목록 조회 중 오류가 발생했습니다.");
+      }
+    }
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authStatus]);
+
+  if (authStatus !== "authenticated") {
+    return (
+      <article className="panel">
+        <p className="auth-panel__message">세션을 확인하는 중입니다.</p>
+      </article>
+    );
+  }
+
+  return (
+    <article className="panel panel--workspace">
+      <div className="workspace-header">
+        <div>
+          <p className="auth-panel__eyebrow">저장된 글</p>
+          <h2 className="workspace-header__title">내 생성 결과</h2>
+          <p className="auth-panel__message">최근 저장된 생성 결과를 확인할 수 있습니다.</p>
+        </div>
+        <button className="button button--secondary" type="button" onClick={() => navigate("/generate")}>
+          새 글 생성
+        </button>
+      </div>
+
+      {status === "loading" || status === "error" ? (
+        <section className={`result result--${status}`} aria-live="polite">
+          <div className="result__body">
+            <p>{message}</p>
+          </div>
+        </section>
+      ) : items.length ? (
+        <div className="saved-list">
+          {items.map((item) => (
+            <button
+              key={item.id}
+              className="saved-list__item"
+              type="button"
+              onClick={() => navigate(`/generations/${item.id}`)}
+            >
+              <span className="saved-list__meta">{new Date(item.createdAt).toLocaleString()}</span>
+              <strong>{item.name}</strong>
+              <span className="saved-list__preview">{item.preview || item.summary}</span>
+              <span className="saved-list__keywords">{item.keywords.join(", ")}</span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <section className="result result--idle" aria-live="polite">
+          <div className="result__body">
+            <p>아직 저장된 생성 결과가 없습니다.</p>
+          </div>
+        </section>
+      )}
+    </article>
+  );
+}
+
+function LegacyResultRedirect() {
+  const { id } = useParams<{ id: string }>();
+  return <Navigate to={id ? `/generations/${id}` : "/generations"} replace />;
 }
 
 export function App() {
@@ -149,8 +300,6 @@ export function App() {
   const [authSubmitting, setAuthSubmitting] = useState(false);
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
   const [result, setResult] = useState(INITIAL_RESULT);
-  const [lastResultId, setLastResultId] = useState<string | null>(null);
-  const [resultImageUrl, setResultImageUrl] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState("");
   const [imageMessage, setImageMessage] = useState("");
@@ -182,7 +331,7 @@ export function App() {
         setAuthStatus("authenticated");
         return;
       }
-    } catch (error) {
+    } catch (_error) {
       setAuthMessage("현재 세션 정보를 불러오지 못했습니다.");
     }
 
@@ -212,9 +361,7 @@ export function App() {
     setImageAnalysis(null);
 
     if (imagePreviewUrl) {
-      if (imagePreviewUrl !== resultImageUrl) {
-        URL.revokeObjectURL(imagePreviewUrl);
-      }
+      URL.revokeObjectURL(imagePreviewUrl);
       setImagePreviewUrl("");
     }
 
@@ -315,7 +462,6 @@ export function App() {
         status: "error",
         content: "마케팅 문구를 생성하려면 모든 항목을 입력해 주세요.",
       });
-      navigate("/result");
       return;
     }
 
@@ -323,9 +469,6 @@ export function App() {
       status: "loading",
       content: "마케팅 문구를 생성하는 중입니다.",
     });
-    setLastResultId(null);
-    setResultImageUrl(imagePreviewUrl);
-    navigate("/result");
 
     try {
       const response = await fetch("/api/generate", {
@@ -356,8 +499,10 @@ export function App() {
         content: data.generated_text || "",
       });
       if (data.id) {
-        setLastResultId(data.id);
+        navigate(`/generations/${data.id}`);
+        return;
       }
+      throw new Error(data.detail || "저장된 생성 결과 ID를 받지 못했습니다.");
     } catch (error) {
       setResult({
         status: "error",
@@ -416,9 +561,9 @@ export function App() {
       <>
         <article className="panel panel--intro">
           <SectionTitle
-            eyebrow="AI 바이럴 카피 랩"
-            title="제품 정보를 마케팅 문구로 빠르게 바꿔보세요."
-            description="회원가입 또는 로그인 후 보호된 작업 공간에서 문구 생성과 이미지 기반 추천 기능을 이용할 수 있습니다."
+            eyebrow="AI 바이럴 카피"
+            title="상품 정보를 마케팅 문구로 빠르게 바꿔보세요"
+            description="회원가입 또는 로그인 후 문구 생성과 이미지 기반 추천 기능을 이용할 수 있습니다."
           />
         </article>
 
@@ -495,52 +640,16 @@ export function App() {
           onAnalyzeImage={handleAnalyzeImage}
           onSubmit={handleSubmit}
         />
+        {result.status === "error" ? (
+          <section className="result result--error" aria-live="polite">
+            <div className="result__body">
+              <p>{result.content}</p>
+            </div>
+          </section>
+        ) : null}
       </article>
     );
   }
-
-  function renderResult() {
-    if (authStatus === "loading") {
-      return (
-        <article className="panel">
-          <p className="auth-panel__message">세션을 확인하는 중입니다.</p>
-        </article>
-      );
-    }
-
-    return (
-      <article className="panel panel--workspace">
-        <div className="workspace-header">
-          <div>
-            <p className="auth-panel__eyebrow">결과</p>
-            <h2 className="workspace-header__title">생성된 마케팅 문구</h2>
-          </div>
-          <div className="workspace-header__actions">
-            {result.status === "success" && lastResultId ? (
-              <button
-                className="button button--secondary"
-                type="button"
-                onClick={() => window.open(`/result/${lastResultId}`, "_blank", "noopener")}
-              >
-                새 창에서 보기
-              </button>
-            ) : null}
-            <button className="button button--secondary" type="button" onClick={() => navigate("/generate")}>
-              생성 페이지로
-            </button>
-          </div>
-        </div>
-
-        <ResultPanel
-          status={result.status}
-          content={result.content}
-          imageUrl={resultImageUrl || undefined}
-        />
-      </article>
-    );
-  }
-
-  const showResultTab = result.status !== "idle";
 
   return (
     <main className="page-shell">
@@ -555,9 +664,9 @@ export function App() {
           <button className="app-nav__link" type="button" onClick={openGeneratePage}>
             문구 생성
           </button>
-          {showResultTab ? (
-            <button className="app-nav__link" type="button" onClick={() => navigate("/result")}>
-              생성 결과
+          {authUser ? (
+            <button className="app-nav__link" type="button" onClick={() => navigate("/generations")}>
+              저장 글
             </button>
           ) : null}
           {authUser ? (
@@ -581,8 +690,10 @@ export function App() {
           <Route path="/login" element={renderAuth("login")} />
           <Route path="/signup" element={renderAuth("signup")} />
           <Route path="/generate" element={renderGenerate()} />
-          <Route path="/result" element={renderResult()} />
-          <Route path="/result/:id" element={<SharedResultPage authStatus={authStatus} />} />
+          <Route path="/generations" element={<SavedGenerationsPage authStatus={authStatus} />} />
+          <Route path="/generations/:id" element={<SharedResultPage authStatus={authStatus} />} />
+          <Route path="/result" element={<LegacyResultRedirect />} />
+          <Route path="/result/:id" element={<LegacyResultRedirect />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </section>

@@ -434,6 +434,29 @@ textarea {
   font-size: 1.2rem;
 }
 
+.result__tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.result__copy {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.result__copy:hover {
+  border-color: rgba(15, 118, 110, 0.38);
+  color: var(--accent-strong);
+}
+
 .result__badge {
   padding: 6px 10px;
   border-radius: 999px;
@@ -526,6 +549,45 @@ textarea {
   color: var(--muted);
   background: rgba(91, 141, 239, 0.06);
   border-radius: 4px;
+}
+
+.saved-list {
+  display: grid;
+  gap: 10px;
+}
+
+.saved-list__item {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  padding: 16px 18px;
+  border: 1px solid rgba(29, 43, 42, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.68);
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  box-shadow: none;
+}
+
+.saved-list__item:hover {
+  border-color: rgba(15, 118, 110, 0.36);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.saved-list__item strong {
+  font-size: 1rem;
+}
+
+.saved-list__meta,
+.saved-list__keywords {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.saved-list__preview {
+  color: var(--ink);
+  line-height: 1.55;
 }
 
 @media (max-width: 920px) {

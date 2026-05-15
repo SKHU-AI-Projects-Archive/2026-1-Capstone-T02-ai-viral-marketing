@@ -7,6 +7,8 @@ type ResultPanelProps = {
   status: ResultState;
   content: string;
   imageUrl?: string;
+  copyLabel?: string;
+  onCopy?: () => void;
 };
 
 const TITLE_MAP: Record<ResultState, string> = {
@@ -37,7 +39,7 @@ function passthroughUrl(url: string): string {
   return url;
 }
 
-export function ResultPanel({ status, content, imageUrl }: ResultPanelProps) {
+export function ResultPanel({ status, content, imageUrl, copyLabel = "복사", onCopy }: ResultPanelProps) {
   const isMarkdown = status === "success";
   const rendered = isMarkdown ? substituteImages(content, imageUrl) : content;
 
@@ -45,7 +47,14 @@ export function ResultPanel({ status, content, imageUrl }: ResultPanelProps) {
     <section className={`result result--${status}`} aria-live="polite">
       <div className="result__header">
         <h2>{TITLE_MAP[status]}</h2>
-        <span className="result__badge">{BADGE_MAP[status]}</span>
+        <div className="result__tools">
+          {onCopy ? (
+            <button className="result__copy" type="button" onClick={onCopy}>
+              {copyLabel}
+            </button>
+          ) : null}
+          <span className="result__badge">{BADGE_MAP[status]}</span>
+        </div>
       </div>
       <div className="result__body">
         {isMarkdown ? (

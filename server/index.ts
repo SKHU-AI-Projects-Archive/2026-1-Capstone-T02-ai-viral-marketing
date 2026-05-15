@@ -9,6 +9,18 @@ import session from "express-session";
 import multer from "multer";
 import { Collection, MongoClient, ObjectId } from "mongodb";
 
+import {
+  GenerationRecord,
+  ensureGenerationIndexes,
+  findGenerationForUser,
+  listGenerationsForUser,
+  normalizeGenerationInput,
+  saveGeneratedArticle,
+  toGenerationListItem,
+  toGenerationResponse,
+  validateGenerationInput,
+} from "./generationStore";
+
 dotenv.config({ path: path.join(process.cwd(), ".env") });
 
 type SessionUser = {
@@ -21,25 +33,6 @@ type UserRecord = {
   name: string;
   email: string;
   passwordHash: string;
-  createdAt: Date;
-};
-
-type Tone = "blog" | "coupang_review" | "community_comment";
-
-const ALLOWED_TONES: readonly Tone[] = ["blog", "coupang_review", "community_comment"];
-
-function normalizeTone(value: unknown): Tone {
-  return ALLOWED_TONES.includes(value as Tone) ? (value as Tone) : "blog";
-}
-
-type GenerationRecord = {
-  userId: ObjectId;
-  name: string;
-  keywords: string[];
-  summary: string;
-  tone: Tone;
-  imageAnalysis: unknown;
-  generatedText: string;
   createdAt: Date;
 };
 
@@ -175,7 +168,7 @@ async function bootstrap(): Promise<void> {
   usersCollection = database.collection<UserRecord>(usersCollectionName);
   await usersCollection.createIndex({ email: 1 }, { unique: true });
   generationsCollection = database.collection<GenerationRecord>(generationsCollectionName);
-  await generationsCollection.createIndex({ userId: 1, createdAt: -1 });
+  await ensureGenerationIndexes(generationsCollection);
   console.log(
     `[bootstrap] generations collection ready: ${usersDbName}.${generationsCollectionName}`
   );
@@ -325,6 +318,13 @@ async function bootstrap(): Promise<void> {
   });
 
   app.post("/api/generate", requireAuth, async (req: Request, res: Response) => {
+    const input = normalizeGenerationInput(req.body);
+    const validationError = validateGenerationInput(input);
+    if (validationError) {
+      res.status(400).json({ detail: validationError });
+      return;
+    }
+
     let upstreamResponse: globalThis.Response;
     try {
       upstreamResponse = await fetch(`${fastApiBaseUrl}/internal/generate`, {
@@ -332,7 +332,7 @@ async function bootstrap(): Promise<void> {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(req.body),
+        body: JSON.stringify(input),
       });
     } catch (error) {
       console.error("[generate] FastAPI fetch failed:", error);
@@ -351,31 +351,39 @@ async function bootstrap(): Promise<void> {
     const sessionUser = req.session.user!;
 
     try {
-      const insertResult = await generationsCollection.insertOne({
-        userId: new ObjectId(sessionUser.id),
-        name: String(req.body?.name || ""),
-        keywords: Array.isArray(req.body?.keywords) ? req.body.keywords : [],
-        summary: String(req.body?.summary || ""),
-        tone: normalizeTone(req.body?.tone),
-        imageAnalysis: req.body?.imageAnalysis ?? null,
-        generatedText,
-        createdAt: new Date(),
-      });
-
-      console.log(
-        `[generate] saved generation ${insertResult.insertedId.toString()} for user ${sessionUser.id}`
+      const savedGeneration = await saveGeneratedArticle(
+        generationsCollection,
+        sessionUser.id,
+        input,
+        generatedText
       );
 
-      res.status(upstreamResponse.status).json({
-        generated_text: generatedText,
-        id: insertResult.insertedId.toString(),
-      });
+      console.log(
+        `[generate] auto-saved generation ${savedGeneration._id.toString()} for user ${sessionUser.id}`
+      );
+
+      res.status(upstreamResponse.status).json(toGenerationResponse(savedGeneration));
     } catch (error) {
       console.error("[generate] Mongo insert failed:", error);
       res.status(500).json({
         generated_text: generatedText,
         detail: "결과 저장에 실패했습니다. 생성된 텍스트는 표시됩니다.",
       });
+    }
+  });
+
+  app.get("/api/generations", requireAuth, async (req: Request, res: Response) => {
+    const rawLimit = Number(req.query.limit || 20);
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.trunc(rawLimit), 1), 50) : 20;
+    const sessionUser = req.session.user!;
+
+    try {
+      const records = await listGenerationsForUser(generationsCollection, sessionUser.id, limit);
+      res.json({
+        items: records.map(toGenerationListItem),
+      });
+    } catch (_error) {
+      res.status(500).json({ detail: "생성 결과 목록 조회 중 오류가 발생했습니다." });
     }
   });
 
@@ -387,26 +395,14 @@ async function bootstrap(): Promise<void> {
     }
 
     try {
-      const record = await generationsCollection.findOne({ _id: new ObjectId(rawId) });
+      const sessionUser = req.session.user!;
+      const record = await findGenerationForUser(generationsCollection, sessionUser.id, rawId);
       if (!record) {
         res.status(404).json({ detail: "생성 결과를 찾을 수 없습니다." });
         return;
       }
 
-      const sessionUser = req.session.user!;
-      if (record.userId.toString() !== sessionUser.id) {
-        res.status(403).json({ detail: "해당 결과에 접근할 권한이 없습니다." });
-        return;
-      }
-
-      res.json({
-        id: record._id.toString(),
-        name: record.name,
-        keywords: record.keywords,
-        summary: record.summary,
-        generated_text: record.generatedText,
-        createdAt: record.createdAt,
-      });
+      res.json(toGenerationResponse(record));
     } catch (_error) {
       res.status(500).json({ detail: "생성 결과 조회 중 오류가 발생했습니다." });
     }
@@ -434,9 +430,13 @@ async function bootstrap(): Promise<void> {
     }
   });
 
-  app.get(["/generate", "/result", "/result/:id"], requireAuthPage, (req: Request, res: Response) => {
-    sendFrontendEntry(req, res);
-  });
+  app.get(
+    ["/generate", "/result", "/result/:id", "/generations", "/generations/:id"],
+    requireAuthPage,
+    (req: Request, res: Response) => {
+      sendFrontendEntry(req, res);
+    }
+  );
 
   app.get(["/", "/login", "/signup"], (req: Request, res: Response) => {
     sendFrontendEntry(req, res);
@@ -448,7 +448,13 @@ async function bootstrap(): Promise<void> {
       return;
     }
 
-    if (req.path === "/generate" || req.path === "/result" || req.path.startsWith("/result/")) {
+    if (
+      req.path === "/generate" ||
+      req.path === "/result" ||
+      req.path === "/generations" ||
+      req.path.startsWith("/result/") ||
+      req.path.startsWith("/generations/")
+    ) {
       requireAuthPage(req, res, () => sendFrontendEntry(req, res));
       return;
     }

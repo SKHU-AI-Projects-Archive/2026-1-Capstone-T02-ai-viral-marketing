@@ -26,9 +26,9 @@ type MarketingFormProps = {
 };
 
 const TONE_OPTIONS: { value: Tone; label: string; description: string }[] = [
-  { value: "blog", label: "블로그", description: "네이버/티스토리 후기 톤, 700~1200자" },
-  { value: "coupang_review", label: "쿠팡 리뷰", description: "쇼핑몰 짧은 후기, 100~300자" },
-  { value: "community_comment", label: "댓글 홍보", description: "자연스러운 커뮤니티 댓글, 50~150자" },
+  { value: "blog", label: "블로그", description: "네이버 검색형 후기, 700~1200자" },
+  { value: "coupang_review", label: "쿠팡 리뷰", description: "실사용자 후기 톤, 100~300자" },
+  { value: "community_comment", label: "커뮤니티 댓글", description: "자연스러운 커뮤니티 댓글, 50~150자" },
 ];
 
 export function MarketingForm({
