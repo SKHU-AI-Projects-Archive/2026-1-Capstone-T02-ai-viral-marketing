@@ -11,6 +11,9 @@ __pycache__/
 # IDE
 .idea/
 
+# Documentation drafts
+*.md
+
 # Local data
 .chroma/
 .tmp_*
