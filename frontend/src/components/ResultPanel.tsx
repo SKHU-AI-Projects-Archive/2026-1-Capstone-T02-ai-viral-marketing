@@ -35,8 +35,22 @@ function substituteImages(markdown: string, imageUrl?: string): string {
   return markdown.replace(PLACEHOLDER_PATTERN, imageUrl);
 }
 
-function passthroughUrl(url: string): string {
-  return url;
+function safeUrl(url: string): string {
+  const trimmedUrl = url.trim();
+  if (!trimmedUrl) {
+    return "";
+  }
+
+  if (trimmedUrl.startsWith("blob:http://") || trimmedUrl.startsWith("blob:https://")) {
+    return trimmedUrl;
+  }
+
+  try {
+    const parsedUrl = new URL(trimmedUrl);
+    return ["http:", "https:", "mailto:"].includes(parsedUrl.protocol) ? trimmedUrl : "";
+  } catch (_error) {
+    return "";
+  }
 }
 
 export function ResultPanel({ status, content, imageUrl, copyLabel = "복사", onCopy }: ResultPanelProps) {
@@ -58,7 +72,7 @@ export function ResultPanel({ status, content, imageUrl, copyLabel = "복사", o
       </div>
       <div className="result__body">
         {isMarkdown ? (
-          <ReactMarkdown remarkPlugins={[remarkGfm]} urlTransform={passthroughUrl}>
+          <ReactMarkdown remarkPlugins={[remarkGfm]} urlTransform={safeUrl}>
             {rendered}
           </ReactMarkdown>
         ) : (
