@@ -73,8 +73,9 @@ type CsrfTokenResponse = {
   detail?: string;
 };
 
-const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const ALLOWED_IMAGE_TYPE_LABEL = "JPG, PNG, WEBP";
 let csrfTokenPromise: Promise<string> | null = null;
 
 async function getCsrfToken(): Promise<string> {
@@ -412,7 +413,7 @@ export function App() {
 
     if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
       setImageFile(null);
-      setImageMessage("JPG, PNG, WEBP 형식의 이미지만 업로드할 수 있습니다.");
+      setImageMessage(`${ALLOWED_IMAGE_TYPE_LABEL} 형식의 이미지만 업로드할 수 있습니다.`);
       event.target.value = "";
       return;
     }

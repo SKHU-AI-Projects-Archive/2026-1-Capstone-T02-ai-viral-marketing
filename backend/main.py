@@ -5,8 +5,9 @@ from backend.ai import analyze_product_image, generate_marketing_text
 from backend.schemas import AnalyzeImageResponse, GenerateRequest, GenerateResponse
 
 
-ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_IMAGE_BYTES = 4 * 1024 * 1024
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+ALLOWED_IMAGE_TYPE_LABEL = "JPG, PNG, WEBP"
 
 app = FastAPI(title="OVMS AI Service")
 
@@ -59,7 +60,7 @@ async def analyze_image(file: UploadFile = File(...)) -> AnalyzeImageResponse:
     if file.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(
             status_code=400,
-            detail="지원하지 않는 이미지 형식입니다. JPG, PNG, WEBP 파일만 업로드해 주세요.",
+            detail=f"지원하지 않는 이미지 형식입니다. {ALLOWED_IMAGE_TYPE_LABEL} 파일만 업로드해 주세요.",
         )
 
     image_bytes = await file.read()
