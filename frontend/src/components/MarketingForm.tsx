@@ -1,6 +1,6 @@
 import { ChangeEvent, FormEvent, useId } from "react";
 
-import type { Tone } from "../App";
+import type { Tone } from "../api/types";
 import { TextArea } from "./TextArea";
 import { TextInput } from "./TextInput";
 

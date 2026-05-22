@@ -5,22 +5,13 @@ import { AuthPanel, AuthSubmitPayload } from "./components/AuthPanel";
 import { MarketingForm } from "./components/MarketingForm";
 import { ResultPanel } from "./components/ResultPanel";
 import { SectionTitle } from "./components/SectionTitle";
+import { fetchSession, logout as logoutRequest, submitAuth } from "./api/auth";
+import { fetchGeneration, fetchGenerations, generateCopy } from "./api/generation";
+import { analyzeImage } from "./api/image";
+import type { AuthUser, GenerationFetchResponse, GenerationListItem, ImageAnalysis, Tone } from "./api/types";
 
 type ResultState = "idle" | "loading" | "success" | "error";
 type AuthStatus = "loading" | "authenticated" | "guest";
-
-type AuthUser = {
-  id: string;
-  name: string;
-  email: string;
-};
-
-type SessionResponse = {
-  authenticated: boolean;
-  user?: AuthUser;
-};
-
-export type Tone = "blog" | "coupang_review" | "community_comment";
 
 type FormState = {
   name: string;
@@ -29,88 +20,9 @@ type FormState = {
   tone: Tone;
 };
 
-type GenerateResponse = {
-  generated_text: string;
-  id?: string;
-  tone?: Tone;
-  saveSource?: "auto";
-  createdAt?: string;
-  updatedAt?: string;
-  detail?: string;
-};
-
-type GenerationFetchResponse = {
-  id: string;
-  name: string;
-  keywords: string[];
-  summary: string;
-  tone: Tone;
-  generated_text: string;
-  saveSource?: "auto";
-  createdAt: string;
-  updatedAt?: string;
-  detail?: string;
-};
-
-type GenerationListItem = Omit<GenerationFetchResponse, "generated_text" | "detail"> & {
-  preview: string;
-};
-
-type GenerationListResponse = {
-  items: GenerationListItem[];
-  detail?: string;
-};
-
-type ImageAnalysis = {
-  recommendedKeywords: string[];
-  recommendedSummary: string;
-  features: Record<string, unknown>;
-  detail?: string;
-};
-
-type CsrfTokenResponse = {
-  csrfToken: string;
-  detail?: string;
-};
-
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const ALLOWED_IMAGE_TYPE_LABEL = "JPG, PNG, WEBP";
-let csrfTokenPromise: Promise<string> | null = null;
-
-async function getCsrfToken(): Promise<string> {
-  if (!csrfTokenPromise) {
-    csrfTokenPromise = fetch("/api/csrf-token", { credentials: "include" })
-      .then(async (response) => {
-        const data = (await response.json()) as CsrfTokenResponse;
-        if (!response.ok || !data.csrfToken) {
-          throw new Error(data.detail || "요청 보안 토큰을 발급받지 못했습니다.");
-        }
-        return data.csrfToken;
-      })
-      .catch((error) => {
-        csrfTokenPromise = null;
-        throw error;
-      });
-  }
-  return csrfTokenPromise;
-}
-
-function resetCsrfToken() {
-  csrfTokenPromise = null;
-}
-
-async function csrfFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
-  const token = await getCsrfToken();
-  const headers = new Headers(init.headers);
-  headers.set("X-CSRF-Token", token);
-
-  return fetch(input, {
-    ...init,
-    headers,
-    credentials: "include",
-  });
-}
 
 function isProtectedPath(pathname: string): boolean {
   return (
@@ -146,11 +58,11 @@ function SharedResultPage({ authStatus }: { authStatus: AuthStatus }) {
     }
 
     let cancelled = false;
+    const generationId = id;
 
     async function load() {
       try {
-        const response = await fetch(`/api/generations/${id}`, { credentials: "include" });
-        const data = (await response.json()) as GenerationFetchResponse;
+        const { response, data } = await fetchGeneration(generationId);
 
         if (cancelled) return;
 
@@ -244,8 +156,7 @@ function SavedGenerationsPage({ authStatus }: { authStatus: AuthStatus }) {
 
     async function load() {
       try {
-        const response = await fetch("/api/generations?limit=50", { credentials: "include" });
-        const data = (await response.json()) as GenerationListResponse;
+        const { response, data } = await fetchGenerations(50);
 
         if (cancelled) return;
 
@@ -362,10 +273,7 @@ export function App() {
     setAuthStatus("loading");
 
     try {
-      const response = await fetch("/api/auth/session", {
-        credentials: "include",
-      });
-      const data = (await response.json()) as SessionResponse;
+      const data = await fetchSession();
 
       if (data.authenticated && data.user) {
         setAuthUser(data.user);
@@ -436,18 +344,11 @@ export function App() {
       return;
     }
 
-    const body = new FormData();
-    body.append("file", imageFile);
-
     setAnalyzingImage(true);
     setImageMessage("이미지를 분석하는 중입니다.");
 
     try {
-      const response = await csrfFetch("/api/analyze-image", {
-        method: "POST",
-        body,
-      });
-      const data = (await response.json()) as ImageAnalysis;
+      const { response, data } = await analyzeImage(imageFile);
 
       if (response.status === 401) {
         setAuthUser(null);
@@ -511,15 +412,7 @@ export function App() {
     });
 
     try {
-      const response = await csrfFetch("/api/generate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const data = (await response.json()) as GenerateResponse;
+      const { response, data } = await generateCopy(payload);
 
       if (response.status === 401) {
         setAuthUser(null);
@@ -555,15 +448,7 @@ export function App() {
     setAuthMessage("");
 
     try {
-      const endpoint = payload.mode === "signup" ? "/api/auth/signup" : "/api/auth/login";
-      const response = await csrfFetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-      const data = (await response.json()) as { detail?: string; user?: AuthUser };
+      const { response, data } = await submitAuth(payload);
 
       if (!response.ok || !data.user) {
         throw new Error(data.detail || "인증에 실패했습니다.");
@@ -571,7 +456,6 @@ export function App() {
 
       setAuthUser(data.user);
       setAuthStatus("authenticated");
-      resetCsrfToken();
       setAuthMessage(payload.mode === "signup" ? "회원가입이 완료되었습니다. 바로 로그인되었습니다." : "로그인되었습니다.");
       navigate("/generate");
     } catch (error) {
@@ -583,11 +467,8 @@ export function App() {
 
   async function handleLogout() {
     try {
-      await csrfFetch("/api/auth/logout", {
-        method: "POST",
-      });
+      await logoutRequest();
     } finally {
-      resetCsrfToken();
       setAuthUser(null);
       setAuthStatus("guest");
       setAuthMessage("로그아웃되었습니다.");
