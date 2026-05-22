@@ -68,8 +68,48 @@ type ImageAnalysis = {
   detail?: string;
 };
 
+type CsrfTokenResponse = {
+  csrfToken: string;
+  detail?: string;
+};
+
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+let csrfTokenPromise: Promise<string> | null = null;
+
+async function getCsrfToken(): Promise<string> {
+  if (!csrfTokenPromise) {
+    csrfTokenPromise = fetch("/api/csrf-token", { credentials: "include" })
+      .then(async (response) => {
+        const data = (await response.json()) as CsrfTokenResponse;
+        if (!response.ok || !data.csrfToken) {
+          throw new Error(data.detail || "요청 보안 토큰을 발급받지 못했습니다.");
+        }
+        return data.csrfToken;
+      })
+      .catch((error) => {
+        csrfTokenPromise = null;
+        throw error;
+      });
+  }
+  return csrfTokenPromise;
+}
+
+function resetCsrfToken() {
+  csrfTokenPromise = null;
+}
+
+async function csrfFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+  const token = await getCsrfToken();
+  const headers = new Headers(init.headers);
+  headers.set("X-CSRF-Token", token);
+
+  return fetch(input, {
+    ...init,
+    headers,
+    credentials: "include",
+  });
+}
 
 function isProtectedPath(pathname: string): boolean {
   return (
@@ -402,10 +442,9 @@ export function App() {
     setImageMessage("이미지를 분석하는 중입니다.");
 
     try {
-      const response = await fetch("/api/analyze-image", {
+      const response = await csrfFetch("/api/analyze-image", {
         method: "POST",
         body,
-        credentials: "include",
       });
       const data = (await response.json()) as ImageAnalysis;
 
@@ -471,12 +510,11 @@ export function App() {
     });
 
     try {
-      const response = await fetch("/api/generate", {
+      const response = await csrfFetch("/api/generate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        credentials: "include",
         body: JSON.stringify(payload),
       });
 
@@ -517,12 +555,11 @@ export function App() {
 
     try {
       const endpoint = payload.mode === "signup" ? "/api/auth/signup" : "/api/auth/login";
-      const response = await fetch(endpoint, {
+      const response = await csrfFetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        credentials: "include",
         body: JSON.stringify(payload),
       });
       const data = (await response.json()) as { detail?: string; user?: AuthUser };
@@ -533,6 +570,7 @@ export function App() {
 
       setAuthUser(data.user);
       setAuthStatus("authenticated");
+      resetCsrfToken();
       setAuthMessage(payload.mode === "signup" ? "회원가입이 완료되었습니다. 바로 로그인되었습니다." : "로그인되었습니다.");
       navigate("/generate");
     } catch (error) {
@@ -544,11 +582,11 @@ export function App() {
 
   async function handleLogout() {
     try {
-      await fetch("/api/auth/logout", {
+      await csrfFetch("/api/auth/logout", {
         method: "POST",
-        credentials: "include",
       });
     } finally {
+      resetCsrfToken();
       setAuthUser(null);
       setAuthStatus("guest");
       setAuthMessage("로그아웃되었습니다.");

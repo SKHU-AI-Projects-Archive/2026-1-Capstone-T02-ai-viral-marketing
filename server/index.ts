@@ -1,12 +1,15 @@
 /// <reference path="./bcryptjs.d.ts" />
 /// <reference path="./express-session.d.ts" />
 
+import { randomBytes, timingSafeEqual } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 
 import bcrypt = require("bcryptjs");
 import MongoStore = require("connect-mongo");
 import express = require("express");
+const helmet = require("helmet") as typeof import("helmet").default;
+const { rateLimit } = require("express-rate-limit") as typeof import("express-rate-limit");
 import session = require("express-session");
 import multer = require("multer");
 import { Collection, MongoClient, ObjectId } from "mongodb";
@@ -54,6 +57,20 @@ const usersDbName = "users";
 const usersCollectionName = "user";
 const generationsCollectionName = "generations";
 const frontendDistPath = path.join(process.cwd(), "frontend", "dist");
+const authRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: nodeEnv === "production" ? 10 : 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { detail: "인증 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요." },
+});
+const aiRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: nodeEnv === "production" ? 30 : 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { detail: "AI 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요." },
+});
 
 let usersCollection: Collection<UserRecord>;
 let generationsCollection: Collection<GenerationRecord>;
@@ -116,6 +133,35 @@ function requireAuthPage(req: Request, res: Response, next: NextFunction): void 
   next();
 }
 
+function createCsrfToken(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+function getOrCreateCsrfToken(req: Request): string {
+  if (!req.session.csrfToken) {
+    req.session.csrfToken = createCsrfToken();
+  }
+  return req.session.csrfToken;
+}
+
+function tokensMatch(expected: string, actual: string): boolean {
+  const expectedBuffer = Buffer.from(expected);
+  const actualBuffer = Buffer.from(actual);
+  return expectedBuffer.length === actualBuffer.length && timingSafeEqual(expectedBuffer, actualBuffer);
+}
+
+function requireCsrfToken(req: Request, res: Response, next: NextFunction): void {
+  const expectedToken = req.session.csrfToken;
+  const submittedToken = String(req.get("X-CSRF-Token") || "");
+
+  if (!expectedToken || !submittedToken || !tokensMatch(expectedToken, submittedToken)) {
+    res.status(403).json({ detail: "요청 보안 토큰이 유효하지 않습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요." });
+    return;
+  }
+
+  next();
+}
+
 function destroySession(req: Request): Promise<void> {
   return new Promise((resolve, reject) => {
     req.session.destroy((error) => {
@@ -170,6 +216,11 @@ async function bootstrap(): Promise<void> {
     `[bootstrap] generations collection ready: ${usersDbName}.${generationsCollectionName}`
   );
 
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+    })
+  );
   app.use(express.json());
   app.use(
     session({
@@ -194,6 +245,10 @@ async function bootstrap(): Promise<void> {
 
   app.use(express.static(frontendDistPath));
 
+  app.get("/api/csrf-token", (req: Request, res: Response) => {
+    res.json({ csrfToken: getOrCreateCsrfToken(req) });
+  });
+
   app.get("/api/auth/session", (req: Request, res: Response) => {
     if (!req.session.user) {
       res.json({ authenticated: false });
@@ -206,7 +261,7 @@ async function bootstrap(): Promise<void> {
     });
   });
 
-  app.post("/api/auth/signup", async (req: Request, res: Response) => {
+  app.post("/api/auth/signup", authRateLimit, requireCsrfToken, async (req: Request, res: Response) => {
     const name = String(req.body?.name || "").trim();
     const email = normalizeEmail(req.body?.email);
     const password = String(req.body?.password || "");
@@ -265,7 +320,7 @@ async function bootstrap(): Promise<void> {
     }
   });
 
-  app.post("/api/auth/login", async (req: Request, res: Response) => {
+  app.post("/api/auth/login", authRateLimit, requireCsrfToken, async (req: Request, res: Response) => {
     const email = normalizeEmail(req.body?.email);
     const password = String(req.body?.password || "");
 
@@ -299,7 +354,7 @@ async function bootstrap(): Promise<void> {
     }
   });
 
-  app.post("/api/auth/logout", async (req: Request, res: Response) => {
+  app.post("/api/auth/logout", requireCsrfToken, async (req: Request, res: Response) => {
     if (!req.session.user) {
       res.json({ detail: "이미 로그아웃된 상태입니다." });
       return;
@@ -314,7 +369,7 @@ async function bootstrap(): Promise<void> {
     }
   });
 
-  app.post("/api/generate", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/generate", aiRateLimit, requireAuth, requireCsrfToken, async (req: Request, res: Response) => {
     const input = normalizeGenerationInput(req.body);
     const validationError = validateGenerationInput(input);
     if (validationError) {
@@ -405,7 +460,7 @@ async function bootstrap(): Promise<void> {
     }
   });
 
-  app.post("/api/analyze-image", requireAuth, upload.single("file"), async (req: Request, res: Response) => {
+  app.post("/api/analyze-image", aiRateLimit, requireAuth, requireCsrfToken, upload.single("file"), async (req: Request, res: Response) => {
     if (!req.file) {
       res.status(400).json({ detail: "이미지 파일을 업로드해 주세요." });
       return;
