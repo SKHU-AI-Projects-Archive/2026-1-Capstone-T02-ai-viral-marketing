@@ -17,12 +17,20 @@ _client = chromadb.PersistentClient(path=str(CHROMA_DIR))
 _collection = _client.get_or_create_collection(name=COLLECTION_NAME, metadata={"hnsw:space": "cosine"})
 
 
-def _compose_source_text(name: str, keywords: list[str], summary: str, generated_text: str = "") -> str:
+def _compose_source_text(
+    name: str,
+    keywords: list[str],
+    summary: str,
+    generated_text: str = "",
+    tone: str | None = None,
+) -> str:
     parts = [
         f"name: {name.strip()}",
         f"keywords: {', '.join(keyword.strip() for keyword in keywords if keyword.strip())}",
         f"summary: {summary.strip()}",
     ]
+    if tone:
+        parts.append(f"tone: {tone.strip()}")
     if generated_text.strip():
         parts.append(f"generated_text: {generated_text.strip()}")
     return "\n".join(parts)
@@ -51,36 +59,75 @@ def _embed_text(text: str) -> list[float]:
     return [value / norm for value in vector]
 
 
-def _build_metadata(name: str, keywords: list[str], summary: str, generated_text: str) -> dict[str, Any]:
+def _build_metadata(
+    name: str,
+    keywords: list[str],
+    summary: str,
+    generated_text: str,
+    tone: str,
+) -> dict[str, Any]:
     return {
         "name": name,
         "keywords_json": json.dumps(keywords, ensure_ascii=False),
         "summary": summary,
         "generated_text": generated_text,
+        "tone": tone,
     }
 
 
-def store_generated_example(name: str, keywords: list[str], summary: str, generated_text: str) -> str:
-    document = _compose_source_text(name=name, keywords=keywords, summary=summary, generated_text=generated_text)
+def store_generated_example(
+    name: str,
+    keywords: list[str],
+    summary: str,
+    generated_text: str,
+    tone: str = "blog",
+) -> str:
+    document = _compose_source_text(
+        name=name,
+        keywords=keywords,
+        summary=summary,
+        generated_text=generated_text,
+        tone=tone,
+    )
     doc_id = hashlib.sha256(document.encode("utf-8")).hexdigest()
     _collection.upsert(
         ids=[doc_id],
         documents=[document],
-        metadatas=[_build_metadata(name=name, keywords=keywords, summary=summary, generated_text=generated_text)],
+        metadatas=[
+            _build_metadata(
+                name=name,
+                keywords=keywords,
+                summary=summary,
+                generated_text=generated_text,
+                tone=tone,
+            )
+        ],
         embeddings=[_embed_text(document)],
     )
     return doc_id
 
 
-def query_similar_examples(name: str, keywords: list[str], summary: str, limit: int = 3) -> list[dict[str, Any]]:
+def query_similar_examples(
+    name: str,
+    keywords: list[str],
+    summary: str,
+    limit: int = 3,
+    tone: str | None = None,
+) -> list[dict[str, Any]]:
     if limit <= 0:
         return []
 
-    query_document = _compose_source_text(name=name, keywords=keywords, summary=summary)
+    query_document = _compose_source_text(name=name, keywords=keywords, summary=summary, tone=tone)
+    query_args: dict[str, Any] = {
+        "query_embeddings": [_embed_text(query_document)],
+        "n_results": limit,
+        "include": ["metadatas", "distances"],
+    }
+    if tone:
+        query_args["where"] = {"tone": tone}
+
     result = _collection.query(
-        query_embeddings=[_embed_text(query_document)],
-        n_results=limit,
-        include=["metadatas", "distances"],
+        **query_args,
     )
 
     matches: list[dict[str, Any]] = []
@@ -99,6 +146,7 @@ def query_similar_examples(name: str, keywords: list[str], summary: str, limit: 
                 "keywords": json.loads(metadata.get("keywords_json", "[]")),
                 "summary": metadata.get("summary", ""),
                 "generated_text": metadata.get("generated_text", ""),
+                "tone": metadata.get("tone", ""),
                 "distance": distance,
             }
         )

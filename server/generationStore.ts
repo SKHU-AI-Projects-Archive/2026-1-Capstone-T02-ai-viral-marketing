@@ -40,6 +40,11 @@ export type GenerationListItem = Omit<GenerationResponse, "generated_text"> & {
 };
 
 const ALLOWED_TONES: readonly Tone[] = ["blog", "coupang_review", "community_comment"];
+const PREVIEW_LIMIT_BY_TONE: Record<Tone, number> = {
+  blog: 160,
+  coupang_review: 500,
+  community_comment: 500,
+};
 
 export function normalizeTone(value: unknown): Tone {
   return ALLOWED_TONES.includes(value as Tone) ? (value as Tone) : "blog";
@@ -158,6 +163,7 @@ export function toGenerationResponse(record: WithId<GenerationRecord>): Generati
 export function toGenerationListItem(record: WithId<GenerationRecord>): GenerationListItem {
   const response = toGenerationResponse(record);
   const compactText = response.generated_text.replace(/\s+/g, " ").trim();
+  const previewLimit = PREVIEW_LIMIT_BY_TONE[response.tone] ?? PREVIEW_LIMIT_BY_TONE.blog;
 
   return {
     id: response.id,
@@ -168,6 +174,6 @@ export function toGenerationListItem(record: WithId<GenerationRecord>): Generati
     saveSource: response.saveSource,
     createdAt: response.createdAt,
     updatedAt: response.updatedAt,
-    preview: compactText.length > 160 ? `${compactText.slice(0, 157)}...` : compactText,
+    preview: compactText.length > previewLimit ? `${compactText.slice(0, previewLimit - 3)}...` : compactText,
   };
 }

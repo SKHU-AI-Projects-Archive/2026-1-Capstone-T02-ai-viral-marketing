@@ -1,29 +1,19 @@
 import base64
 import json
-import os
-from pathlib import Path
 from typing import Any
 
 import httpx
-from dotenv import load_dotenv
 
+from backend.config import get_gemini_settings
 from backend.vector_store import query_similar_examples, store_generated_example
 
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(dotenv_path=BASE_DIR / ".env", override=True)
-DEFAULT_GEMINI_TIMEOUT_SECONDS = 110.0
-MIN_GENERATE_TIMEOUT_SECONDS = 15.0
-MIN_IMAGE_ANALYSIS_TIMEOUT_SECONDS = 30.0
+MAX_GENERATION_ATTEMPTS = 3
+MAX_GENERATION_OUTPUT_TOKENS = 8192
 
 
-def _normalize_model_name(model: str) -> str:
-    normalized = model.strip()
-    if not normalized:
-        raise ValueError("GEMINI_MODEL environment variable is empty.")
-    if normalized.startswith("models/"):
-        normalized = normalized[len("models/") :]
-    return normalized
+class GeminiOutputTruncatedError(ValueError):
+    pass
 
 
 def _extract_error_message(response: httpx.Response) -> str:
@@ -45,42 +35,17 @@ def _extract_error_message(response: httpx.Response) -> str:
     return response.reason_phrase or "Unknown Gemini API error."
 
 
-def _get_env_float(name: str, default: float) -> float:
-    raw_value = os.getenv(name)
-    if raw_value is None:
-        return default
-    return float(raw_value)
-
-
-def _get_gemini_config() -> tuple[str, str]:
-    api_key = os.getenv("GEMINI_API_KEY")
-    model = _normalize_model_name(os.getenv("GEMINI_MODEL", "gemini-2.5-flash"))
-    if not api_key:
-        raise ValueError("GEMINI_API_KEY environment variable is not set.")
-    return api_key, model
-
-
-def _get_gemini_timeout_seconds(*, image_analysis: bool = False) -> float:
-    base_timeout = _get_env_float("GEMINI_TIMEOUT_SECONDS", DEFAULT_GEMINI_TIMEOUT_SECONDS)
-    if image_analysis:
-        image_timeout = _get_env_float("GEMINI_IMAGE_TIMEOUT_SECONDS", base_timeout)
-        return max(image_timeout, MIN_IMAGE_ANALYSIS_TIMEOUT_SECONDS)
-
-    generate_timeout = _get_env_float("GEMINI_GENERATE_TIMEOUT_SECONDS", base_timeout)
-    return max(generate_timeout, MIN_GENERATE_TIMEOUT_SECONDS)
-
-
 def _post_gemini(payload: dict[str, Any], *, image_analysis: bool = False) -> dict[str, Any]:
-    api_key, model = _get_gemini_config()
-    timeout_seconds = _get_gemini_timeout_seconds(image_analysis=image_analysis)
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    settings = get_gemini_settings()
+    timeout_seconds = settings.image_timeout_seconds if image_analysis else settings.generate_timeout_seconds
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.model}:generateContent"
 
     try:
         response = httpx.post(
             url,
             headers={
                 "Content-Type": "application/json",
-                "x-goog-api-key": api_key,
+                "x-goog-api-key": settings.api_key,
             },
             json=payload,
             timeout=timeout_seconds,
@@ -116,10 +81,15 @@ def _post_gemini(payload: dict[str, Any], *, image_analysis: bool = False) -> di
 
 def _extract_generated_text(data: dict[str, Any]) -> str:
     try:
-        parts = data["candidates"][0]["content"]["parts"]
+        candidate = data["candidates"][0]
+        parts = candidate["content"]["parts"]
         generated_text = "".join(part.get("text", "") for part in parts).strip()
     except (KeyError, IndexError, TypeError) as exc:
         raise ValueError("Gemini response format was unexpected.") from exc
+
+    finish_reason = str(candidate.get("finishReason", "")).upper()
+    if finish_reason == "MAX_TOKENS":
+        raise GeminiOutputTruncatedError("Gemini stopped before finishing the response.")
 
     if not generated_text:
         raise ValueError("Gemini returned an empty response.")
@@ -358,9 +328,30 @@ _TONE_BUILDERS = {
 
 _TONE_GENERATION_CONFIG: dict[str, dict[str, Any]] = {
     "blog": {"maxOutputTokens": 8192, "temperature": 0.85},
-    "coupang_review": {"maxOutputTokens": 1024, "temperature": 0.9},
-    "community_comment": {"maxOutputTokens": 512, "temperature": 0.95},
+    "coupang_review": {"maxOutputTokens": 2048, "temperature": 0.9},
+    "community_comment": {"maxOutputTokens": 2048, "temperature": 0.95},
 }
+
+_MAX_REFERENCE_TEXT_CHARS: dict[str, int] = {
+    "blog": 1200,
+    "coupang_review": 420,
+    "community_comment": 260,
+}
+
+
+def _generation_config_for_attempt(tone: str, attempt: int) -> dict[str, Any]:
+    config = dict(_TONE_GENERATION_CONFIG[tone])
+    output_tokens = int(config.get("maxOutputTokens", MAX_GENERATION_OUTPUT_TOKENS))
+    config["maxOutputTokens"] = min(output_tokens * (2**attempt), MAX_GENERATION_OUTPUT_TOKENS)
+    return config
+
+
+def _clip_reference_text(text: str, tone: str) -> str:
+    normalized = text.strip()
+    max_chars = _MAX_REFERENCE_TEXT_CHARS.get(tone, 600)
+    if len(normalized) <= max_chars:
+        return normalized
+    return f"{normalized[:max_chars].rstrip()}..."
 
 
 def generate_marketing_text(
@@ -374,7 +365,7 @@ def generate_marketing_text(
     if builder is None:
         raise ValueError(f"Unsupported tone: {tone}")
 
-    similar_examples = query_similar_examples(name=name, keywords=keywords, summary=summary, limit=3)
+    similar_examples = query_similar_examples(name=name, keywords=keywords, summary=summary, limit=3, tone=tone)
     example_block = ""
     if similar_examples:
         formatted_examples = []
@@ -384,7 +375,7 @@ def generate_marketing_text(
 - Product name: {example["name"]}
 - Keywords: {", ".join(example["keywords"])}
 - Summary: {example["summary"]}
-- Generated text: {example["generated_text"]}"""
+- Generated text: {_clip_reference_text(example["generated_text"], tone)}"""
             )
         example_block = "\n\nReference examples from previous successful generations:\n" + "\n\n".join(
             formatted_examples
@@ -398,26 +389,36 @@ def generate_marketing_text(
         example_block=example_block,
     )
 
-    payload = {
-        "contents": [
-            {
-                "parts": [
-                    {
-                        "text": prompt,
-                    }
-                ]
-            }
-        ],
-        "generationConfig": _TONE_GENERATION_CONFIG[tone],
-    }
+    generated_text = ""
+    last_truncation_error: GeminiOutputTruncatedError | None = None
+    for attempt in range(MAX_GENERATION_ATTEMPTS):
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {
+                            "text": prompt,
+                        }
+                    ]
+                }
+            ],
+            "generationConfig": _generation_config_for_attempt(tone, attempt),
+        }
 
-    generated_text = _extract_generated_text(_post_gemini(payload))
+        try:
+            generated_text = _extract_generated_text(_post_gemini(payload))
+            break
+        except GeminiOutputTruncatedError as exc:
+            last_truncation_error = exc
+    else:
+        raise ValueError("AI 응답이 토큰 제한으로 중간에 끊겼습니다. 다시 시도해 주세요.") from last_truncation_error
 
     store_generated_example(
         name=name,
         keywords=keywords,
         summary=summary,
         generated_text=generated_text,
+        tone=tone,
     )
 
     return generated_text

@@ -1,14 +1,17 @@
-import fs from "fs";
-import path from "path";
+/// <reference path="./bcryptjs.d.ts" />
+/// <reference path="./express-session.d.ts" />
 
-import bcrypt from "bcryptjs";
-import MongoStore from "connect-mongo";
-import dotenv from "dotenv";
-import express, { NextFunction, Request, Response } from "express";
-import session from "express-session";
-import multer from "multer";
+import * as fs from "fs";
+import * as path from "path";
+
+import bcrypt = require("bcryptjs");
+import MongoStore = require("connect-mongo");
+import express = require("express");
+import session = require("express-session");
+import multer = require("multer");
 import { Collection, MongoClient, ObjectId } from "mongodb";
 
+import { serverConfig } from "./config";
 import {
   GenerationRecord,
   ensureGenerationIndexes,
@@ -21,7 +24,9 @@ import {
   validateGenerationInput,
 } from "./generationStore";
 
-dotenv.config({ path: path.join(process.cwd(), ".env") });
+type NextFunction = express.NextFunction;
+type Request = express.Request;
+type Response = express.Response;
 
 type SessionUser = {
   id: string;
@@ -44,11 +49,7 @@ const upload = multer({
   },
 });
 
-const port = Number(process.env.PORT || 3000);
-const mongoUrl = (process.env.MONGO_DB || "").trim();
-const sessionSecret = process.env.SESSION_SECRET || "replace-this-session-secret";
-const fastApiBaseUrl = (process.env.FASTAPI_BASE_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
-const frontendDevUrl = (process.env.FRONTEND_DEV_URL || "http://127.0.0.1:5173").replace(/\/+$/, "");
+const { port, mongoUrl, sessionSecret, fastApiBaseUrl, frontendDevUrl, nodeEnv } = serverConfig;
 const usersDbName = "users";
 const usersCollectionName = "user";
 const generationsCollectionName = "generations";
@@ -62,7 +63,7 @@ function frontendBuildExists(): boolean {
 }
 
 function shouldUseFrontendDevServer(): boolean {
-  return process.env.NODE_ENV !== "production";
+  return nodeEnv !== "production";
 }
 
 function sendFrontendUnavailable(res: Response): void {
@@ -157,10 +158,6 @@ async function relayJsonResponse(upstreamResponse: globalThis.Response, res: Res
 }
 
 async function bootstrap(): Promise<void> {
-  if (!mongoUrl) {
-    throw new Error("MONGO_DB 환경 변수가 설정되어 있지 않습니다.");
-  }
-
   const mongoClient = new MongoClient(mongoUrl);
   await mongoClient.connect();
 
@@ -189,7 +186,7 @@ async function bootstrap(): Promise<void> {
       cookie: {
         httpOnly: true,
         sameSite: "lax",
-        secure: process.env.NODE_ENV === "production",
+        secure: nodeEnv === "production",
         maxAge: 24 * 60 * 60 * 1000,
       },
     })
