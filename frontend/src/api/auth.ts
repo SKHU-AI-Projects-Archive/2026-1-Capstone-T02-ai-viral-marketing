@@ -1,11 +1,12 @@
 import { csrfFetch, resetCsrfToken } from "./csrf";
+import { readJson } from "./http";
 import type { AuthSubmitRequest, AuthSubmitResponse, SessionResponse } from "./types";
 
 export async function fetchSession(): Promise<SessionResponse> {
   const response = await fetch("/api/auth/session", {
     credentials: "include",
   });
-  return (await response.json()) as SessionResponse;
+  return readJson<SessionResponse>(response, { authenticated: false });
 }
 
 export async function submitAuth(payload: AuthSubmitRequest): Promise<{ response: Response; data: AuthSubmitResponse }> {
@@ -17,7 +18,9 @@ export async function submitAuth(payload: AuthSubmitRequest): Promise<{ response
     },
     body: JSON.stringify(payload),
   });
-  const data = (await response.json()) as AuthSubmitResponse;
+  const data = await readJson<AuthSubmitResponse>(response, {
+    detail: "인증 서버 응답을 읽지 못했습니다. 잠시 후 다시 시도해 주세요.",
+  });
 
   if (response.ok && data.user) {
     resetCsrfToken();
@@ -35,4 +38,3 @@ export async function logout(): Promise<void> {
     resetCsrfToken();
   }
 }
-

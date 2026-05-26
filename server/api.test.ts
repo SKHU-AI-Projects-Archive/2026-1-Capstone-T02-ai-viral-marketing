@@ -1,0 +1,182 @@
+/// <reference path="./express-session.d.ts" />
+
+import bcrypt = require("bcryptjs");
+import express = require("express");
+import session = require("express-session");
+import { ObjectId, WithId } from "mongodb";
+import request = require("supertest");
+import { describe, expect, it } from "vitest";
+
+import type { UserRecord } from "./db";
+import type { GenerationRecord } from "./generationStore";
+import { createAuthRouter } from "./routes/auth";
+import { createGenerationRouter } from "./routes/generation";
+
+type UserDocument = WithId<UserRecord>;
+type GenerationDocument = WithId<GenerationRecord>;
+type TestAgent = ReturnType<typeof request.agent>;
+
+class FakeUsersCollection {
+  readonly records: UserDocument[] = [];
+
+  async findOne(query: Partial<UserRecord>): Promise<UserDocument | null> {
+    return this.records.find((record) => record.email === query.email) ?? null;
+  }
+
+  async insertOne(document: UserRecord): Promise<{ insertedId: ObjectId }> {
+    const insertedId = new ObjectId();
+    this.records.push({ ...document, _id: insertedId });
+    return { insertedId };
+  }
+}
+
+class FakeGenerationsCollection {
+  readonly records: GenerationDocument[] = [];
+
+  async findOne(query: { _id?: ObjectId; userId?: ObjectId }): Promise<GenerationDocument | null> {
+    return (
+      this.records.find((record) => {
+        const sameId = !query._id || record._id.equals(query._id);
+        const sameUser = !query.userId || record.userId.equals(query.userId);
+        return sameId && sameUser;
+      }) ?? null
+    );
+  }
+
+  find(query: { userId?: ObjectId }) {
+    const records = this.records.filter((record) => !query.userId || record.userId.equals(query.userId));
+    return {
+      sort: () => ({
+        limit: (limit: number) => ({
+          toArray: async () => records.slice(0, limit),
+        }),
+      }),
+    };
+  }
+}
+
+function createTestApp(users = new FakeUsersCollection(), generations = new FakeGenerationsCollection()) {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    session({
+      secret: "test-session-secret",
+      resave: false,
+      saveUninitialized: false,
+    })
+  );
+  app.use("/api", createAuthRouter(users as never));
+  app.use("/api", createGenerationRouter(generations as never));
+  return { app, users, generations };
+}
+
+async function getCsrfToken(agent: TestAgent): Promise<string> {
+  const response = await agent.get("/api/csrf-token").expect(200);
+  return response.body.csrfToken;
+}
+
+async function seedUser(users: FakeUsersCollection, email: string, password = "secret123"): Promise<UserDocument> {
+  const passwordHash = await bcrypt.hash(password, 4);
+  const user: UserDocument = {
+    _id: new ObjectId(),
+    name: email.split("@")[0],
+    email,
+    passwordHash,
+    createdAt: new Date(),
+  };
+  users.records.push(user);
+  return user;
+}
+
+function seedGeneration(
+  generations: FakeGenerationsCollection,
+  userId: ObjectId,
+  overrides: Partial<GenerationRecord> = {}
+): GenerationDocument {
+  const now = new Date("2026-05-26T00:00:00.000Z");
+  const record: GenerationDocument = {
+    _id: new ObjectId(),
+    userId,
+    name: "테스트 상품",
+    keywords: ["가성비", "후기"],
+    summary: "저장 결과 테스트",
+    tone: "blog",
+    imageAnalysis: null,
+    generatedText: "생성된 테스트 문구입니다.",
+    saveSource: "auto",
+    createdAt: now,
+    updatedAt: now,
+    ...overrides,
+  };
+  generations.records.push(record);
+  return record;
+}
+
+describe("Node API", () => {
+  it("validates signup input", async () => {
+    const { app } = createTestApp();
+    const agent = request.agent(app);
+    const csrfToken = await getCsrfToken(agent);
+
+    const response = await agent
+      .post("/api/auth/signup")
+      .set("X-CSRF-Token", csrfToken)
+      .send({ name: "", email: "new@example.com", password: "secret123" })
+      .expect(400);
+
+    expect(response.body.detail).toBe("이름을 입력해 주세요.");
+  });
+
+  it("returns 401 for failed login and user data for successful login", async () => {
+    const { app, users } = createTestApp();
+    await seedUser(users, "user@example.com", "secret123");
+
+    const failedAgent = request.agent(app);
+    const failedToken = await getCsrfToken(failedAgent);
+    await failedAgent
+      .post("/api/auth/login")
+      .set("X-CSRF-Token", failedToken)
+      .send({ email: "user@example.com", password: "wrong-password" })
+      .expect(401);
+
+    const successAgent = request.agent(app);
+    const successToken = await getCsrfToken(successAgent);
+    const response = await successAgent
+      .post("/api/auth/login")
+      .set("X-CSRF-Token", successToken)
+      .send({ email: "user@example.com", password: "secret123" })
+      .expect(200);
+
+    expect(response.body.user).toMatchObject({ email: "user@example.com" });
+  });
+
+  it("rejects protected generation APIs without authentication", async () => {
+    const { app } = createTestApp();
+
+    const response = await request(app).get("/api/generations").expect(401);
+
+    expect(response.body.detail).toBe("로그인이 필요합니다.");
+  });
+
+  it("isolates saved generation results by authenticated user", async () => {
+    const { app, users, generations } = createTestApp();
+    const userA = await seedUser(users, "alpha@example.com", "secret123");
+    const userB = await seedUser(users, "beta@example.com", "secret123");
+    const ownRecord = seedGeneration(generations, userA._id, { name: "내 상품" });
+    const otherRecord = seedGeneration(generations, userB._id, { name: "다른 사용자 상품" });
+
+    const agent = request.agent(app);
+    const csrfToken = await getCsrfToken(agent);
+    await agent
+      .post("/api/auth/login")
+      .set("X-CSRF-Token", csrfToken)
+      .send({ email: "alpha@example.com", password: "secret123" })
+      .expect(200);
+
+    const listResponse = await agent.get("/api/generations").expect(200);
+    expect(listResponse.body.items).toHaveLength(1);
+    expect(listResponse.body.items[0]).toMatchObject({ id: ownRecord._id.toString(), name: "내 상품" });
+
+    await agent.get(`/api/generations/${otherRecord._id.toString()}`).expect(404);
+  });
+});
