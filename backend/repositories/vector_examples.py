@@ -8,9 +8,10 @@ def query_similar_generation_examples(
     keywords: list[str],
     summary: str,
     tone: str,
+    user_id: str | None = None,
     limit: int = 3,
 ) -> list[dict[str, Any]]:
-    return query_similar_examples(name=name, keywords=keywords, summary=summary, tone=tone, limit=limit)
+    return query_similar_examples(name=name, keywords=keywords, summary=summary, tone=tone, user_id=user_id, limit=limit)
 
 
 def store_generation_example(
@@ -19,6 +20,7 @@ def store_generation_example(
     summary: str,
     generated_text: str,
     tone: str,
+    user_id: str | None = None,
 ) -> str:
     return store_generated_example(
         name=name,
@@ -26,5 +28,5 @@ def store_generation_example(
         summary=summary,
         generated_text=generated_text,
         tone=tone,
+        user_id=user_id,
     )
-

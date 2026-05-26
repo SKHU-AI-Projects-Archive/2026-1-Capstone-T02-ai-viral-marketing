@@ -30,8 +30,12 @@ export function createGenerationRouter(generationsCollection: Collection<Generat
     }
 
     let upstreamResponse: globalThis.Response;
+    const sessionUser = req.session.user!;
     try {
-      upstreamResponse = await postFastApiJson("/internal/generate", input);
+      upstreamResponse = await postFastApiJson("/internal/generate", {
+        ...input,
+        userId: sessionUser.id,
+      });
     } catch (error) {
       console.error("[generate] FastAPI fetch failed:", error);
       res.status(502).json({ detail: "AI 생성 서버에 연결하지 못했습니다." });
@@ -46,7 +50,6 @@ export function createGenerationRouter(generationsCollection: Collection<Generat
 
     const data = (await upstreamResponse.json()) as { generated_text?: string };
     const generatedText = data.generated_text || "";
-    const sessionUser = req.session.user!;
 
     try {
       const savedGeneration = await saveGeneratedArticle(
@@ -108,4 +111,3 @@ export function createGenerationRouter(generationsCollection: Collection<Generat
 
   return router;
 }
-

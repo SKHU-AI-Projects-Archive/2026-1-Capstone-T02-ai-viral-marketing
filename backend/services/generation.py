@@ -44,8 +44,15 @@ def _clip_reference_text(text: str, tone: str) -> str:
     return f"{normalized[:max_chars].rstrip()}..."
 
 
-def _format_example_block(name: str, keywords: list[str], summary: str, tone: str) -> str:
-    similar_examples = query_similar_generation_examples(name=name, keywords=keywords, summary=summary, tone=tone, limit=3)
+def _format_example_block(name: str, keywords: list[str], summary: str, tone: str, user_id: str | None) -> str:
+    similar_examples = query_similar_generation_examples(
+        name=name,
+        keywords=keywords,
+        summary=summary,
+        tone=tone,
+        user_id=user_id,
+        limit=3,
+    )
     if not similar_examples:
         return ""
 
@@ -67,6 +74,7 @@ def generate_marketing_text(
     summary: str,
     image_analysis: dict[str, Any] | None = None,
     tone: str = "blog",
+    user_id: str | None = None,
 ) -> str:
     builder = TONE_BUILDERS.get(tone)
     if builder is None:
@@ -77,7 +85,7 @@ def generate_marketing_text(
         keywords,
         summary,
         _format_image_analysis_block(image_analysis),
-        _format_example_block(name=name, keywords=keywords, summary=summary, tone=tone),
+        _format_example_block(name=name, keywords=keywords, summary=summary, tone=tone, user_id=user_id),
     )
 
     generated_text = ""
@@ -110,7 +118,7 @@ def generate_marketing_text(
         summary=summary,
         generated_text=generated_text,
         tone=tone,
+        user_id=user_id,
     )
 
     return generated_text
-

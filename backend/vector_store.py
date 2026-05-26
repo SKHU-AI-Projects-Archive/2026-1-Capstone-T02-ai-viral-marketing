@@ -3,7 +3,8 @@ import json
 import math
 import os
 from pathlib import Path
-from typing import Any
+from datetime import datetime, timezone
+from typing import Any, Literal
 
 import chromadb
 
@@ -12,6 +13,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 CHROMA_DIR = Path(os.getenv("CHROMA_DB_PATH", BASE_DIR / ".chroma"))
 COLLECTION_NAME = "marketing_examples"
 EMBEDDING_DIMENSION = 256
+DEFAULT_QUALITY_SCORE = 1.0
+DEFAULT_SOURCE = "generated"
+DEFAULT_USER_SCOPE = "private"
+
+UserScope = Literal["private", "public"]
 
 _client = chromadb.PersistentClient(path=str(CHROMA_DIR))
 _collection = _client.get_or_create_collection(name=COLLECTION_NAME, metadata={"hnsw:space": "cosine"})
@@ -65,14 +71,52 @@ def _build_metadata(
     summary: str,
     generated_text: str,
     tone: str,
+    user_id: str | None,
+    user_scope: UserScope,
+    quality_score: float,
+    source: str,
 ) -> dict[str, Any]:
-    return {
+    metadata: dict[str, Any] = {
         "name": name,
         "keywords_json": json.dumps(keywords, ensure_ascii=False),
         "summary": summary,
         "generated_text": generated_text,
         "tone": tone,
+        "user_scope": user_scope,
+        "quality_score": quality_score,
+        "source": source,
+        "created_at": datetime.now(timezone.utc).isoformat(),
     }
+    if user_id:
+        metadata["user_id"] = user_id
+    return metadata
+
+
+def _normalize_user_scope(user_scope: str | None) -> UserScope:
+    return "public" if user_scope == "public" else "private"
+
+
+def _normalize_quality_score(quality_score: float | int | None) -> float:
+    if quality_score is None:
+        return DEFAULT_QUALITY_SCORE
+    return max(0.0, min(float(quality_score), 1.0))
+
+
+def _build_query_filter(tone: str | None, user_id: str | None) -> dict[str, Any]:
+    filters: list[dict[str, Any]] = []
+    if tone:
+        filters.append({"tone": tone})
+
+    scope_filter: dict[str, Any]
+    if user_id:
+        scope_filter = {"$or": [{"user_scope": "public"}, {"user_id": user_id}]}
+    else:
+        scope_filter = {"user_scope": "public"}
+    filters.append(scope_filter)
+
+    if len(filters) == 1:
+        return filters[0]
+    return {"$and": filters}
 
 
 def store_generated_example(
@@ -81,7 +125,12 @@ def store_generated_example(
     summary: str,
     generated_text: str,
     tone: str = "blog",
+    user_id: str | None = None,
+    user_scope: str | None = DEFAULT_USER_SCOPE,
+    quality_score: float | int | None = DEFAULT_QUALITY_SCORE,
+    source: str = DEFAULT_SOURCE,
 ) -> str:
+    normalized_user_scope = _normalize_user_scope(user_scope)
     document = _compose_source_text(
         name=name,
         keywords=keywords,
@@ -90,6 +139,8 @@ def store_generated_example(
         tone=tone,
     )
     doc_id = hashlib.sha256(document.encode("utf-8")).hexdigest()
+    if user_id and normalized_user_scope == "private":
+        doc_id = hashlib.sha256(f"{user_id}\n{document}".encode("utf-8")).hexdigest()
     _collection.upsert(
         ids=[doc_id],
         documents=[document],
@@ -100,6 +151,10 @@ def store_generated_example(
                 summary=summary,
                 generated_text=generated_text,
                 tone=tone,
+                user_id=user_id,
+                user_scope=normalized_user_scope,
+                quality_score=_normalize_quality_score(quality_score),
+                source=source,
             )
         ],
         embeddings=[_embed_text(document)],
@@ -113,6 +168,7 @@ def query_similar_examples(
     summary: str,
     limit: int = 3,
     tone: str | None = None,
+    user_id: str | None = None,
 ) -> list[dict[str, Any]]:
     if limit <= 0:
         return []
@@ -122,9 +178,8 @@ def query_similar_examples(
         "query_embeddings": [_embed_text(query_document)],
         "n_results": limit,
         "include": ["metadatas", "distances"],
+        "where": _build_query_filter(tone, user_id),
     }
-    if tone:
-        query_args["where"] = {"tone": tone}
 
     result = _collection.query(
         **query_args,
@@ -147,6 +202,11 @@ def query_similar_examples(
                 "summary": metadata.get("summary", ""),
                 "generated_text": metadata.get("generated_text", ""),
                 "tone": metadata.get("tone", ""),
+                "user_scope": metadata.get("user_scope", ""),
+                "user_id": metadata.get("user_id", ""),
+                "quality_score": metadata.get("quality_score"),
+                "source": metadata.get("source", ""),
+                "created_at": metadata.get("created_at", ""),
                 "distance": distance,
             }
         )

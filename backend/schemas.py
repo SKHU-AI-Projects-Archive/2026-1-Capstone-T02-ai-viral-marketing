@@ -30,6 +30,7 @@ class GenerateRequest(BaseModel):
     summary: str = Field(..., min_length=1, description="Product summary")
     tone: Tone = Field(default="blog", description="Output tone preset")
     imageAnalysis: ImageAnalysis | None = None
+    userId: str | None = Field(default=None, description="Internal user id for private example retrieval")
 
 
 class GenerateResponse(BaseModel):
