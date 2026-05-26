@@ -5,6 +5,7 @@ import { fetchGeneration } from "../api/generation";
 import type { GenerationFetchResponse } from "../api/types";
 import { ResultPanel } from "../components/ResultPanel";
 import type { AuthStatus } from "../hooks/useAuth";
+import { getToneLabel } from "../utils/tone";
 
 type ResultState = "idle" | "loading" | "success" | "error";
 
@@ -95,6 +96,38 @@ export function SharedResultPage({ authStatus }: { authStatus: AuthStatus }) {
         <p className="auth-panel__message">{copyState === "copied" ? "복사되었습니다." : "복사에 실패했습니다."}</p>
       ) : null}
 
+      {meta ? (
+        <section className="generation-meta" aria-label="생성 결과 메타데이터">
+          <div className="generation-meta__row">
+            <span className="meta-badge meta-badge--tone">{getToneLabel(meta.tone)}</span>
+            {meta.imageAnalysisApplied ? <span className="meta-badge">이미지 분석 반영</span> : null}
+            <span className="generation-meta__date">{new Date(meta.createdAt).toLocaleString()}</span>
+          </div>
+
+          <div className="generation-meta__block">
+            <h3>키워드</h3>
+            <div className="keyword-list">
+              {meta.keywords.map((keyword) => (
+                <span key={keyword} className="keyword-chip">
+                  {keyword}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="generation-meta__block">
+            <h3>요약</h3>
+            <p>{meta.summary}</p>
+          </div>
+
+          <p className="generation-meta__notice">
+            {meta.imageAnalysisApplied
+              ? "이미지 분석 결과가 문구 생성에 반영되었습니다. 업로드한 원본 이미지는 저장하지 않습니다."
+              : "업로드한 원본 이미지는 저장하지 않습니다. 이 결과는 저장된 텍스트 정보만 보관합니다."}
+          </p>
+        </section>
+      ) : null}
+
       <ResultPanel
         status={status}
         content={content}
@@ -104,4 +137,3 @@ export function SharedResultPage({ authStatus }: { authStatus: AuthStatus }) {
     </article>
   );
 }
-

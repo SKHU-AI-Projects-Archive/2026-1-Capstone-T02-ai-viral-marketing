@@ -30,6 +30,7 @@ export type GenerationResponse = {
   summary: string;
   tone: Tone;
   generated_text: string;
+  imageAnalysisApplied: boolean;
   saveSource: "auto";
   createdAt: Date;
   updatedAt: Date;
@@ -45,6 +46,10 @@ const PREVIEW_LIMIT_BY_TONE: Record<Tone, number> = {
   coupang_review: 500,
   community_comment: 500,
 };
+
+function hasImageAnalysis(value: unknown): boolean {
+  return value !== null && value !== undefined;
+}
 
 export function normalizeTone(value: unknown): Tone {
   return ALLOWED_TONES.includes(value as Tone) ? (value as Tone) : "blog";
@@ -154,6 +159,7 @@ export function toGenerationResponse(record: WithId<GenerationRecord>): Generati
     summary: record.summary,
     tone: record.tone,
     generated_text: record.generatedText,
+    imageAnalysisApplied: hasImageAnalysis(record.imageAnalysis),
     saveSource: record.saveSource ?? "auto",
     createdAt: record.createdAt,
     updatedAt: record.updatedAt ?? record.createdAt,
@@ -171,6 +177,7 @@ export function toGenerationListItem(record: WithId<GenerationRecord>): Generati
     keywords: response.keywords,
     summary: response.summary,
     tone: response.tone,
+    imageAnalysisApplied: response.imageAnalysisApplied,
     saveSource: response.saveSource,
     createdAt: response.createdAt,
     updatedAt: response.updatedAt,

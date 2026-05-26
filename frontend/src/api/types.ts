@@ -23,6 +23,7 @@ export type GenerateResponse = {
   generated_text: string;
   id?: string;
   tone?: Tone;
+  imageAnalysisApplied?: boolean;
   saveSource?: "auto";
   createdAt?: string;
   updatedAt?: string;
@@ -36,6 +37,7 @@ export type GenerationFetchResponse = {
   summary: string;
   tone: Tone;
   generated_text: string;
+  imageAnalysisApplied?: boolean;
   saveSource?: "auto";
   createdAt: string;
   updatedAt?: string;
@@ -74,4 +76,3 @@ export type CsrfTokenResponse = {
   csrfToken: string;
   detail?: string;
 };
-

@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { fetchGenerations } from "../api/generation";
 import type { GenerationListItem } from "../api/types";
 import type { AuthStatus } from "../hooks/useAuth";
+import { getToneLabel } from "../utils/tone";
 
 type ResultState = "idle" | "loading" | "success" | "error";
 
@@ -85,7 +86,11 @@ export function SavedGenerationsPage({ authStatus }: { authStatus: AuthStatus })
               type="button"
               onClick={() => navigate(`/generations/${item.id}`)}
             >
-              <span className="saved-list__meta">{new Date(item.createdAt).toLocaleString()}</span>
+              <span className="saved-list__topline">
+                <span className="meta-badge meta-badge--tone">{getToneLabel(item.tone)}</span>
+                {item.imageAnalysisApplied ? <span className="meta-badge">이미지 분석 반영</span> : null}
+                <span className="saved-list__meta">{new Date(item.createdAt).toLocaleString()}</span>
+              </span>
               <strong>{item.name}</strong>
               <span className="saved-list__preview">{item.preview || item.summary}</span>
               <span className="saved-list__keywords">{item.keywords.join(", ")}</span>
@@ -102,4 +107,3 @@ export function SavedGenerationsPage({ authStatus }: { authStatus: AuthStatus })
     </article>
   );
 }
-
