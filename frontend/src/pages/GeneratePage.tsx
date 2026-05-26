@@ -11,11 +11,10 @@ import { useGenerationForm } from "../hooks/useGenerationForm";
 type GeneratePageProps = {
   authStatus: AuthStatus;
   authUser: AuthUser | null;
-  onLogout: () => Promise<void>;
   onSessionExpired: (message: string) => void;
 };
 
-export function GeneratePage({ authStatus, authUser, onLogout, onSessionExpired }: GeneratePageProps) {
+export function GeneratePage({ authStatus, authUser, onSessionExpired }: GeneratePageProps) {
   const navigate = useNavigate();
   const [recentItems, setRecentItems] = useState<GenerationListItem[]>([]);
   const [recentMessage, setRecentMessage] = useState("최근 저장 결과를 불러오는 중입니다.");
@@ -62,11 +61,6 @@ export function GeneratePage({ authStatus, authUser, onLogout, onSessionExpired 
     };
   }, [authStatus]);
 
-  async function handleLogout() {
-    await onLogout();
-    navigate("/login");
-  }
-
   if (authStatus === "loading") {
     return (
       <article className="panel">
@@ -85,11 +79,6 @@ export function GeneratePage({ authStatus, authUser, onLogout, onSessionExpired 
             {authUser ? `${authUser.email} 계정으로 로그인되어 있습니다.` : "로그인이 필요합니다."}
           </p>
         </div>
-        {authUser ? (
-          <button className="button button--secondary" type="button" onClick={() => void handleLogout()}>
-            로그아웃
-          </button>
-        ) : null}
       </div>
 
       <div className="generate-workspace">
@@ -142,7 +131,9 @@ export function GeneratePage({ authStatus, authUser, onLogout, onSessionExpired 
                 ))}
               </div>
             ) : (
-              <p className="recent-panel__message">{recentMessage}</p>
+              <p className="recent-panel__message" role="status" aria-live="polite">
+                {recentMessage}
+              </p>
             )}
           </section>
         </aside>

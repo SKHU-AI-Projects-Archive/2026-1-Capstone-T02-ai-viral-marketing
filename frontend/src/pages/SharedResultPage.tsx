@@ -93,11 +93,13 @@ export function SharedResultPage({ authStatus }: { authStatus: AuthStatus }) {
       </div>
 
       {copyState !== "idle" ? (
-        <p className="auth-panel__message">{copyState === "copied" ? "복사되었습니다." : "복사에 실패했습니다."}</p>
+        <p className="auth-panel__message" role="status" aria-live="polite">
+          {copyState === "copied" ? "복사되었습니다." : "복사에 실패했습니다."}
+        </p>
       ) : null}
 
       {meta ? (
-        <section className="generation-meta" aria-label="생성 결과 메타데이터">
+        <section className="generation-meta" aria-label="생성 결과 메타데이터" aria-live="polite">
           <div className="generation-meta__row">
             <span className="meta-badge meta-badge--tone">{getToneLabel(meta.tone)}</span>
             {meta.imageAnalysisApplied ? <span className="meta-badge">이미지 분석 반영</span> : null}

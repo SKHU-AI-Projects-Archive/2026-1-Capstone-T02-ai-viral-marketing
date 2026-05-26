@@ -53,29 +53,30 @@ export function App() {
     navigate("/generate");
   }
 
+  async function handleNavLogout() {
+    await logout();
+    navigate("/login");
+  }
+
+  function navClassName(active: boolean): string {
+    return `app-nav__link${active ? " app-nav__link--active" : ""}`;
+  }
+
+  const isHomeActive = location.pathname === "/";
+  const isGenerateActive = location.pathname === "/generate";
+  const isGenerationsActive = location.pathname === "/generations" || location.pathname.startsWith("/generations/");
+  const isLoginActive = location.pathname === "/login";
+  const isSignupActive = location.pathname === "/signup";
+
   function renderHome() {
     return (
-      <>
-        <article className="panel panel--intro">
-          <SectionTitle
-            eyebrow="AI 바이럴 카피"
-            title="상품 정보를 마케팅 문구로 빠르게 바꿔보세요"
-            description="회원가입 또는 로그인 후 문구 생성과 이미지 기반 추천 기능을 이용할 수 있습니다."
-          />
-        </article>
-
-        <article className="panel home-actions">
-          <button className="button" type="button" onClick={openGeneratePage}>
-            문구 생성하기
-          </button>
-          <button className="button button--secondary" type="button" onClick={() => navigate("/login")}>
-            로그인
-          </button>
-          <button className="button button--secondary" type="button" onClick={() => navigate("/signup")}>
-            회원가입
-          </button>
-        </article>
-      </>
+      <article className="panel panel--intro">
+        <SectionTitle
+          eyebrow="AI 바이럴 카피"
+          title="상품 정보를 마케팅 문구로 빠르게 바꿔보세요"
+          description="상단 메뉴에서 문구 생성, 저장 글 확인, 로그인과 회원가입을 이용할 수 있습니다."
+        />
+      </article>
     );
   }
 
@@ -85,33 +86,67 @@ export function App() {
       <div className="backdrop backdrop--two" />
 
       <section className="layout layout--single">
-        <nav className="app-nav" aria-label="주요 메뉴">
-          <button className="app-nav__link" type="button" onClick={() => navigate("/")}>
-            홈
-          </button>
-          <button className="app-nav__link" type="button" onClick={openGeneratePage}>
-            문구 생성
-          </button>
-          {authUser ? (
-            <button className="app-nav__link" type="button" onClick={() => navigate("/generations")}>
-              저장 글
+        <header className="top-bar">
+          <nav className="app-nav" aria-label="주요 메뉴">
+            <button
+              className={navClassName(isHomeActive)}
+              type="button"
+              aria-current={isHomeActive ? "page" : undefined}
+              onClick={() => navigate("/")}
+            >
+              홈
             </button>
-          ) : null}
-          {authUser ? (
-            <button className="app-nav__link app-nav__link--active" type="button" onClick={() => navigate("/generate")}>
-              {authUser.name}
+            <button
+              className={navClassName(isGenerateActive)}
+              type="button"
+              aria-current={isGenerateActive ? "page" : undefined}
+              onClick={openGeneratePage}
+            >
+              문구 생성
             </button>
+            {authUser ? (
+              <button
+                className={navClassName(isGenerationsActive)}
+                type="button"
+                aria-current={isGenerationsActive ? "page" : undefined}
+                onClick={() => navigate("/generations")}
+              >
+                저장 글
+              </button>
+            ) : null}
+            {!authUser ? (
+              <>
+                <button
+                  className={navClassName(isLoginActive)}
+                  type="button"
+                  aria-current={isLoginActive ? "page" : undefined}
+                  onClick={() => navigate("/login")}
+                >
+                  로그인
+                </button>
+                <button
+                  className={navClassName(isSignupActive)}
+                  type="button"
+                  aria-current={isSignupActive ? "page" : undefined}
+                  onClick={() => navigate("/signup")}
+                >
+                  회원가입
+                </button>
+              </>
+            ) : null}
+          </nav>
+
+          {authUser ? (
+            <div className="account-menu" aria-label="계정 정보">
+              <span className="account-menu__user">{authUser.name}</span>
+              <button className="button button--secondary account-menu__logout" type="button" onClick={() => void handleNavLogout()}>
+                로그아웃
+              </button>
+            </div>
           ) : (
-            <>
-              <button className="app-nav__link" type="button" onClick={() => navigate("/login")}>
-                로그인
-              </button>
-              <button className="app-nav__link" type="button" onClick={() => navigate("/signup")}>
-                회원가입
-              </button>
-            </>
+            <span className="account-menu__status">로그인 전</span>
           )}
-        </nav>
+        </header>
 
         <Routes>
           <Route path="/" element={renderHome()} />
@@ -149,7 +184,6 @@ export function App() {
               <GeneratePage
                 authStatus={authStatus}
                 authUser={authUser}
-                onLogout={logout}
                 onSessionExpired={markGuest}
               />
             }
@@ -164,4 +198,3 @@ export function App() {
     </main>
   );
 }
-

@@ -46,15 +46,19 @@ export function MarketingForm({
 }: MarketingFormProps) {
   const keywordHintId = useId();
   const toneGroupId = useId();
+  const toneDescriptionId = useId();
+  const imageHintId = useId();
+  const imageMessageId = useId();
   const activeTone = TONE_OPTIONS.find((option) => option.value === form.tone) ?? TONE_OPTIONS[0];
+  const imageDescription = imageMessage ? `${imageHintId} ${imageMessageId}` : imageHintId;
 
   return (
     <form className="composer" onSubmit={onSubmit}>
-      <fieldset className="tone-segment" aria-labelledby={toneGroupId}>
+      <fieldset className="tone-segment" aria-labelledby={toneGroupId} aria-describedby={toneDescriptionId}>
         <legend id={toneGroupId} className="field__label">
           톤 선택
         </legend>
-        <div className="tone-segment__options" role="radiogroup">
+        <div className="tone-segment__options" role="radiogroup" aria-labelledby={toneGroupId} aria-describedby={toneDescriptionId}>
           {TONE_OPTIONS.map((option) => {
             const checked = option.value === form.tone;
             return (
@@ -67,6 +71,7 @@ export function MarketingForm({
                   name="tone"
                   value={option.value}
                   checked={checked}
+                  aria-describedby={toneDescriptionId}
                   onChange={() => onToneChange(option.value)}
                 />
                 <span className="tone-segment__label">{option.label}</span>
@@ -74,7 +79,9 @@ export function MarketingForm({
             );
           })}
         </div>
-        <span className="field__hint">{activeTone.description}</span>
+        <span className="field__hint" id={toneDescriptionId}>
+          {activeTone.description}
+        </span>
       </fieldset>
 
       <TextInput
@@ -95,9 +102,12 @@ export function MarketingForm({
             className="field__control"
             type="file"
             accept="image/jpeg,image/png,image/webp"
+            aria-describedby={imageDescription}
             onChange={onImageChange}
           />
-          <span className="field__hint">JPG, PNG, WEBP 형식만 업로드할 수 있으며 최대 4MB까지 지원합니다.</span>
+          <span className="field__hint" id={imageHintId}>
+            JPG, PNG, WEBP 형식만 업로드할 수 있으며 최대 4MB까지 지원합니다.
+          </span>
         </label>
 
         {imagePreviewUrl ? (
@@ -111,11 +121,16 @@ export function MarketingForm({
             className="button button--secondary"
             type="button"
             disabled={!imagePreviewUrl || analyzingImage}
+            aria-busy={analyzingImage}
             onClick={onAnalyzeImage}
           >
             {analyzingImage ? "이미지 분석 중..." : "이미지 분석"}
           </button>
-          {imageMessage ? <span className="field__hint">{imageMessage}</span> : null}
+          {imageMessage ? (
+            <span className="field__hint" id={imageMessageId} role="status" aria-live="polite">
+              {imageMessage}
+            </span>
+          ) : null}
         </div>
       </div>
 
@@ -144,7 +159,7 @@ export function MarketingForm({
       />
 
       <div className="composer__actions">
-        <button className="button" type="submit" disabled={loading}>
+        <button className="button" type="submit" disabled={loading} aria-busy={loading}>
           {loading ? "생성 중..." : "마케팅 문구 생성"}
         </button>
       </div>

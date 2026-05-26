@@ -56,9 +56,10 @@ function safeUrl(url: string): string {
 export function ResultPanel({ status, content, imageUrl, copyLabel = "복사", onCopy }: ResultPanelProps) {
   const isMarkdown = status === "success";
   const rendered = isMarkdown ? substituteImages(content, imageUrl) : content;
+  const liveRole = status === "error" ? "alert" : status === "loading" ? "status" : undefined;
 
   return (
-    <section className={`result result--${status}`} aria-live="polite">
+    <section className={`result result--${status}`} role={liveRole} aria-live="polite">
       <div className="result__header">
         <h2>{TITLE_MAP[status]}</h2>
         <div className="result__tools">
