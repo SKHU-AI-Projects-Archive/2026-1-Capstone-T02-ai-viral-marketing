@@ -146,6 +146,11 @@ a:focus-visible,
   min-height: auto;
 }
 
+.landing-shell {
+  display: grid;
+  gap: 20px;
+}
+
 .hero__eyebrow {
   margin: 0 0 14px;
   color: var(--accent-strong);
@@ -191,6 +196,172 @@ a:focus-visible,
 .highlight-card span {
   color: var(--muted);
   line-height: 1.6;
+}
+
+.landing-hero {
+  position: relative;
+  overflow: hidden;
+  min-height: 560px;
+  display: flex;
+  align-items: flex-end;
+  padding: 52px;
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(9, 24, 31, 0.92), rgba(9, 24, 31, 0.7) 46%, rgba(9, 24, 31, 0.24)),
+    url("https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1800&q=80") center / cover;
+  color: #ffffff;
+  box-shadow: var(--shadow);
+}
+
+.landing-hero__content {
+  display: grid;
+  gap: 22px;
+  max-width: 720px;
+}
+
+.landing-pill {
+  width: fit-content;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.landing-hero h1 {
+  max-width: 760px;
+  margin: 0;
+  font-size: clamp(2.4rem, 6vw, 5rem);
+  line-height: 0.98;
+  letter-spacing: 0;
+}
+
+.landing-hero p {
+  max-width: 620px;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.84);
+  font-size: 1.08rem;
+  line-height: 1.75;
+}
+
+.landing-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.landing-hero__secondary {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+.landing-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 120px));
+  gap: 12px;
+  margin: 6px 0 0;
+}
+
+.landing-metrics div {
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.landing-metrics dt {
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+
+.landing-metrics dd {
+  margin: 4px 0 0;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.82rem;
+}
+
+.landing-section {
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.landing-section--split,
+.landing-cta {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  align-items: center;
+  gap: 24px;
+}
+
+.landing-section h2,
+.landing-cta h2 {
+  margin: 0;
+  font-size: clamp(1.55rem, 3vw, 2.3rem);
+  line-height: 1.16;
+}
+
+.landing-section p,
+.landing-cta p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.landing-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.landing-feature {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-height: 220px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.landing-feature__index {
+  color: #b26a1d;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.landing-feature h3 {
+  margin: 0;
+  font-size: 1.12rem;
+}
+
+.landing-feature p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.68;
+}
+
+.landing-cta {
+  padding: 28px;
+  border: 1px solid rgba(15, 118, 110, 0.22);
+  border-radius: 8px;
+  background: #eaf4f1;
+}
+
+.landing-cta > div {
+  display: grid;
+  gap: 10px;
+}
+
+.landing-cta .button {
+  justify-self: end;
 }
 
 .panel--workspace {
@@ -813,6 +984,21 @@ a:focus-visible,
   .panel--intro {
     min-height: auto;
   }
+
+  .landing-section--split,
+  .landing-feature-grid,
+  .landing-cta {
+    grid-template-columns: 1fr;
+  }
+
+  .landing-hero {
+    min-height: 520px;
+    padding: 36px;
+  }
+
+  .landing-cta .button {
+    justify-self: stretch;
+  }
 }
 
 @media (max-width: 640px) {
@@ -832,6 +1018,22 @@ a:focus-visible,
   .button {
     width: 100%;
     min-width: 0;
+  }
+
+  .landing-hero {
+    min-height: 560px;
+    padding: 28px 20px;
+    background-position: center;
+  }
+
+  .landing-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .landing-section,
+  .landing-feature,
+  .landing-cta {
+    padding: 20px;
   }
 
   .top-bar,
