@@ -1,6 +1,7 @@
 import { Collection, MongoClient } from "mongodb";
 
 import { GenerationRecord, ensureGenerationIndexes } from "./generationStore";
+import { AiJobRecord, ensureJobIndexes } from "./jobStore";
 
 export type UserRecord = {
   name: string;
@@ -12,11 +13,13 @@ export type UserRecord = {
 export type AppCollections = {
   usersCollection: Collection<UserRecord>;
   generationsCollection: Collection<GenerationRecord>;
+  jobsCollection: Collection<AiJobRecord>;
 };
 
 const usersDbName = "users";
 const usersCollectionName = "user";
 const generationsCollectionName = "generations";
+const jobsCollectionName = "ai_jobs";
 
 export async function connectDatabase(mongoUrl: string): Promise<AppCollections> {
   const mongoClient = new MongoClient(mongoUrl);
@@ -29,11 +32,15 @@ export async function connectDatabase(mongoUrl: string): Promise<AppCollections>
   const generationsCollection = database.collection<GenerationRecord>(generationsCollectionName);
   await ensureGenerationIndexes(generationsCollection);
 
+  const jobsCollection = database.collection<AiJobRecord>(jobsCollectionName);
+  await ensureJobIndexes(jobsCollection);
+
   console.log(`[bootstrap] generations collection ready: ${usersDbName}.${generationsCollectionName}`);
+  console.log(`[bootstrap] jobs collection ready: ${usersDbName}.${jobsCollectionName}`);
 
   return {
     usersCollection,
     generationsCollection,
+    jobsCollection,
   };
 }
-

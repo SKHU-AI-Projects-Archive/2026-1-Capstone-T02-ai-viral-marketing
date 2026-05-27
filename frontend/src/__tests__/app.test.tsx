@@ -56,6 +56,78 @@ describe("frontend behavior", () => {
     expect(await screen.findByText("마케팅 문구를 생성하려면 모든 항목을 입력해 주세요.")).toBeInTheDocument();
   });
 
+  it("creates a generation job and finishes after polling succeeds", async () => {
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/csrf-token") {
+        return Promise.resolve(jsonResponse({ csrfToken: "token" }));
+      }
+      if (url === "/api/generation-jobs" && init?.method === "POST") {
+        return Promise.resolve(
+          jsonResponse({
+            id: "job-1",
+            type: "generation",
+            status: "queued",
+            result: null,
+            error: null,
+            attempts: 0,
+            maxAttempts: 3,
+            queuedAt: "2026-05-26T00:00:00.000Z",
+            createdAt: "2026-05-26T00:00:00.000Z",
+            updatedAt: "2026-05-26T00:00:00.000Z",
+          }, 202)
+        );
+      }
+      if (url === "/api/generation-jobs/job-1") {
+        return Promise.resolve(
+          jsonResponse({
+            id: "job-1",
+            type: "generation",
+            status: "succeeded",
+            result: {
+              generationId: "generation-1",
+              generated_text: "완성된 문구",
+            },
+            error: null,
+            attempts: 1,
+            maxAttempts: 3,
+            queuedAt: "2026-05-26T00:00:00.000Z",
+            createdAt: "2026-05-26T00:00:00.000Z",
+            updatedAt: "2026-05-26T00:00:03.000Z",
+          })
+        );
+      }
+      if (url.startsWith("/api/generations")) {
+        return Promise.resolve(jsonResponse({ items: [] }));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+
+    render(
+      <MemoryRouter>
+        <GeneratePage
+          authStatus="authenticated"
+          authUser={{ id: "user-1", name: "테스터", email: "tester@example.com" }}
+          onSessionExpired={vi.fn()}
+        />
+      </MemoryRouter>
+    );
+
+    fireEvent.change(screen.getByLabelText("제품명"), { target: { value: "텀블러" } });
+    fireEvent.change(screen.getByPlaceholderText("예: 보온, 경량, 가성비"), { target: { value: "보온, 가성비" } });
+    fireEvent.change(screen.getByPlaceholderText("예: 국내 생산 스테인리스 텀블러로 보온성이 뛰어난 제품"), {
+      target: { value: "보온성이 좋은 텀블러" },
+    });
+    fireEvent.submit(screen.getByRole("button", { name: "마케팅 문구 생성" }).closest("form")!);
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith("/api/generation-jobs", expect.objectContaining({ method: "POST" }));
+    });
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith("/api/generation-jobs/job-1", { credentials: "include" });
+    });
+  });
+
   it("redirects unauthenticated users from protected routes to login", async () => {
     render(
       <MemoryRouter initialEntries={["/generate"]}>

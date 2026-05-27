@@ -5,15 +5,18 @@ import express = require("express");
 import session = require("express-session");
 import { ObjectId, WithId } from "mongodb";
 import request = require("supertest");
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { UserRecord } from "./db";
 import type { GenerationRecord } from "./generationStore";
+import type { AiJobRecord } from "./jobStore";
 import { createAuthRouter } from "./routes/auth";
 import { createGenerationRouter } from "./routes/generation";
+import { createGenerationJobsRouter } from "./routes/generationJobs";
 
 type UserDocument = WithId<UserRecord>;
 type GenerationDocument = WithId<GenerationRecord>;
+type JobDocument = WithId<AiJobRecord>;
 type TestAgent = ReturnType<typeof request.agent>;
 
 class FakeUsersCollection {
@@ -55,8 +58,53 @@ class FakeGenerationsCollection {
   }
 }
 
-function createTestApp(users = new FakeUsersCollection(), generations = new FakeGenerationsCollection()) {
+class FakeJobsCollection {
+  readonly records: JobDocument[] = [];
+
+  async insertOne(document: AiJobRecord): Promise<{ insertedId: ObjectId }> {
+    const insertedId = new ObjectId();
+    this.records.push({ ...document, _id: insertedId });
+    return { insertedId };
+  }
+
+  async findOne(query: { _id?: ObjectId; userId?: ObjectId; status?: string }): Promise<JobDocument | null> {
+    return (
+      this.records.find((record) => {
+        const sameId = !query._id || record._id.equals(query._id);
+        const sameUser = !query.userId || record.userId.equals(query.userId);
+        const sameStatus = !query.status || record.status === query.status;
+        return sameId && sameUser && sameStatus;
+      }) ?? null
+    );
+  }
+
+  async updateOne(
+    query: { _id?: ObjectId; userId?: ObjectId; status?: string },
+    update: { $set?: Partial<AiJobRecord>; $unset?: Record<string, string> }
+  ): Promise<void> {
+    const record = await this.findOne(query);
+    if (!record) return;
+
+    if (update.$set) {
+      Object.assign(record, update.$set);
+    }
+    if (update.$unset) {
+      for (const key of Object.keys(update.$unset)) {
+        delete (record as unknown as Record<string, unknown>)[key];
+      }
+    }
+  }
+}
+
+function createTestApp(
+  users = new FakeUsersCollection(),
+  generations = new FakeGenerationsCollection(),
+  jobs = new FakeJobsCollection()
+) {
   const app = express();
+  const queue = {
+    add: vi.fn().mockResolvedValue({}),
+  };
   app.use(express.json());
   app.use(
     session({
@@ -66,8 +114,9 @@ function createTestApp(users = new FakeUsersCollection(), generations = new Fake
     })
   );
   app.use("/api", createAuthRouter(users as never));
+  app.use("/api", createGenerationJobsRouter(jobs as never, queue as never));
   app.use("/api", createGenerationRouter(generations as never));
-  return { app, users, generations };
+  return { app, users, generations, jobs, queue };
 }
 
 async function getCsrfToken(agent: TestAgent): Promise<string> {
@@ -109,6 +158,32 @@ function seedGeneration(
     ...overrides,
   };
   generations.records.push(record);
+  return record;
+}
+
+function seedJob(jobs: FakeJobsCollection, userId: ObjectId, overrides: Partial<AiJobRecord> = {}): JobDocument {
+  const now = new Date("2026-05-26T00:00:00.000Z");
+  const record: JobDocument = {
+    _id: new ObjectId(),
+    userId,
+    type: "generation",
+    status: "failed",
+    input: {
+      name: "테스트 상품",
+      keywords: ["키워드"],
+      summary: "요약",
+      tone: "blog",
+    },
+    result: null,
+    error: { message: "실패" },
+    attempts: 3,
+    maxAttempts: 3,
+    queuedAt: now,
+    createdAt: now,
+    updatedAt: now,
+    ...overrides,
+  };
+  jobs.records.push(record);
   return record;
 }
 
@@ -178,5 +253,84 @@ describe("Node API", () => {
     expect(listResponse.body.items[0]).toMatchObject({ id: ownRecord._id.toString(), name: "내 상품" });
 
     await agent.get(`/api/generations/${otherRecord._id.toString()}`).expect(404);
+  });
+
+  it("validates generation job input before enqueueing", async () => {
+    const { app, users, queue } = createTestApp();
+    await seedUser(users, "alpha@example.com", "secret123");
+    const agent = request.agent(app);
+    const csrfToken = await getCsrfToken(agent);
+    await agent
+      .post("/api/auth/login")
+      .set("X-CSRF-Token", csrfToken)
+      .send({ email: "alpha@example.com", password: "secret123" })
+      .expect(200);
+    const nextCsrfToken = await getCsrfToken(agent);
+
+    const response = await agent
+      .post("/api/generation-jobs")
+      .set("X-CSRF-Token", nextCsrfToken)
+      .send({ name: "", keywords: ["키워드"], summary: "요약", tone: "blog" })
+      .expect(400);
+
+    expect(response.body.detail).toBe("상품명을 입력해 주세요.");
+    expect(queue.add).not.toHaveBeenCalled();
+  });
+
+  it("creates generation jobs and hides them from other users", async () => {
+    const { app, users, queue } = createTestApp();
+    await seedUser(users, "alpha@example.com", "secret123");
+    await seedUser(users, "beta@example.com", "secret123");
+
+    const alpha = request.agent(app);
+    const alphaToken = await getCsrfToken(alpha);
+    await alpha
+      .post("/api/auth/login")
+      .set("X-CSRF-Token", alphaToken)
+      .send({ email: "alpha@example.com", password: "secret123" })
+      .expect(200);
+    const nextAlphaToken = await getCsrfToken(alpha);
+
+    const created = await alpha
+      .post("/api/generation-jobs")
+      .set("X-CSRF-Token", nextAlphaToken)
+      .send({ name: "상품", keywords: ["키워드"], summary: "요약", tone: "blog" })
+      .expect(202);
+
+    expect(created.body.status).toBe("queued");
+    expect(queue.add).toHaveBeenCalledTimes(1);
+    await alpha.get(`/api/generation-jobs/${created.body.id}`).expect(200);
+
+    const beta = request.agent(app);
+    const betaToken = await getCsrfToken(beta);
+    await beta
+      .post("/api/auth/login")
+      .set("X-CSRF-Token", betaToken)
+      .send({ email: "beta@example.com", password: "secret123" })
+      .expect(200);
+    await beta.get(`/api/generation-jobs/${created.body.id}`).expect(404);
+  });
+
+  it("retries failed generation jobs", async () => {
+    const { app, users, jobs, queue } = createTestApp();
+    const user = await seedUser(users, "alpha@example.com", "secret123");
+    const failedJob = seedJob(jobs, user._id);
+    const agent = request.agent(app);
+    const csrfToken = await getCsrfToken(agent);
+    await agent
+      .post("/api/auth/login")
+      .set("X-CSRF-Token", csrfToken)
+      .send({ email: "alpha@example.com", password: "secret123" })
+      .expect(200);
+    const nextCsrfToken = await getCsrfToken(agent);
+
+    const response = await agent
+      .post(`/api/generation-jobs/${failedJob._id.toString()}/retry`)
+      .set("X-CSRF-Token", nextCsrfToken)
+      .expect(200);
+
+    expect(response.body.status).toBe("queued");
+    expect(response.body.attempts).toBe(0);
+    expect(queue.add).toHaveBeenCalledTimes(1);
   });
 });

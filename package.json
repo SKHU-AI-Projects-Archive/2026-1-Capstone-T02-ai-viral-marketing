@@ -5,10 +5,12 @@
   "type": "commonjs",
   "scripts": {
     "start": "tsx server/index.ts",
-    "dev": "concurrently -n api,server,web -c blue,green,magenta \"npm:dev:api\" \"npm:dev:server\" \"npm:dev:web\"",
+    "dev": "concurrently -n api,server,worker,web -c blue,green,yellow,magenta \"npm:dev:api\" \"npm:dev:server\" \"npm:dev:worker\" \"npm:dev:web\"",
     "dev:api": ".venv\\Scripts\\python -m uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000",
     "dev:server": "tsx watch server/index.ts",
+    "dev:worker": "tsx watch server/worker.ts",
     "dev:web": "npm --prefix frontend run dev",
+    "worker": "tsx server/worker.ts",
     "typecheck:server": "tsc -p tsconfig.server.json",
     "test": "npm run test:server && npm --prefix frontend run test",
     "test:server": "vitest run",
@@ -16,12 +18,14 @@
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
+    "bullmq": "^5.77.3",
     "connect-mongo": "^5.1.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "express-rate-limit": "^8.5.2",
     "express-session": "^1.18.1",
     "helmet": "^8.2.0",
+    "ioredis": "^5.11.0",
     "mongodb": "^6.14.2",
     "multer": "^2.0.2"
   },

@@ -8,6 +8,7 @@ const DEFAULT_PORT = 3000;
 const DEFAULT_SESSION_SECRET = "replace-this-session-secret";
 const DEFAULT_FASTAPI_BASE_URL = "http://127.0.0.1:8000";
 const DEFAULT_FRONTEND_DEV_URL = "http://127.0.0.1:5173";
+const DEFAULT_REDIS_URL = "redis://127.0.0.1:6379";
 
 export type ServerConfig = {
   nodeEnv: string;
@@ -16,6 +17,7 @@ export type ServerConfig = {
   sessionSecret: string;
   fastApiBaseUrl: string;
   frontendDevUrl: string;
+  redisUrl: string;
 };
 
 function readTrimmedEnv(name: string): string {
@@ -59,6 +61,23 @@ function parseHttpUrl(name: string, rawValue: string, defaultValue: string): str
   return value.replace(/\/+$/, "");
 }
 
+function parseRedisUrl(name: string, rawValue: string, defaultValue: string): string {
+  const value = rawValue || defaultValue;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch (_error) {
+    throw new Error(`${name} 환경 변수는 올바른 Redis URL 형식이어야 합니다.`);
+  }
+
+  if (parsed.protocol !== "redis:" && parsed.protocol !== "rediss:") {
+    throw new Error(`${name} 환경 변수는 redis 또는 rediss URL이어야 합니다.`);
+  }
+
+  return value;
+}
+
 function parseSessionSecret(nodeEnv: string): string {
   const rawSecret = readTrimmedEnv("SESSION_SECRET");
   if (nodeEnv === "production" && (!rawSecret || rawSecret === DEFAULT_SESSION_SECRET)) {
@@ -77,6 +96,7 @@ export function loadServerConfig(): ServerConfig {
     sessionSecret: parseSessionSecret(nodeEnv),
     fastApiBaseUrl: parseHttpUrl("FASTAPI_BASE_URL", readTrimmedEnv("FASTAPI_BASE_URL"), DEFAULT_FASTAPI_BASE_URL),
     frontendDevUrl: parseHttpUrl("FRONTEND_DEV_URL", readTrimmedEnv("FRONTEND_DEV_URL"), DEFAULT_FRONTEND_DEV_URL),
+    redisUrl: parseRedisUrl("REDIS_URL", readTrimmedEnv("REDIS_URL"), DEFAULT_REDIS_URL),
   };
 }
 

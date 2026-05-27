@@ -30,6 +30,33 @@ export type GenerateResponse = {
   detail?: string;
 };
 
+export type JobStatus = "queued" | "running" | "succeeded" | "failed";
+
+export type GenerationJobResult = {
+  generationId: string;
+  generated_text: string;
+};
+
+export type GenerationJobResponse = {
+  id: string;
+  type: "generation";
+  status: JobStatus;
+  result: GenerationJobResult | null;
+  error: {
+    code?: string;
+    message: string;
+  } | null;
+  attempts: number;
+  maxAttempts: number;
+  generationId?: string;
+  queuedAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  detail?: string;
+};
+
 export type GenerationFetchResponse = {
   id: string;
   name: string;

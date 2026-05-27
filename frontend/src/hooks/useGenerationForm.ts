@@ -1,8 +1,8 @@
 import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 
-import { generateCopy } from "../api/generation";
 import { analyzeImage } from "../api/image";
-import type { ImageAnalysis, Tone } from "../api/types";
+import { createGenerationJob, fetchGenerationJob } from "../api/jobs";
+import type { GenerateRequest, GenerationJobResponse, ImageAnalysis, Tone } from "../api/types";
 
 type ResultState = "idle" | "loading" | "success" | "error";
 
@@ -33,6 +33,22 @@ const INITIAL_RESULT = {
   status: "idle" as ResultState,
   content: "",
 };
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+function describeJobStatus(job: GenerationJobResponse): string {
+  if (job.status === "queued") {
+    return "생성 작업이 대기열에 등록되었습니다.";
+  }
+  if (job.status === "running") {
+    return `AI가 마케팅 문구를 생성하는 중입니다. (${job.attempts}/${job.maxAttempts})`;
+  }
+  return "마케팅 문구를 생성하는 중입니다.";
+}
 
 export function useGenerationForm({ onGenerated, onSessionExpired }: UseGenerationFormOptions) {
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
@@ -140,7 +156,7 @@ export function useGenerationForm({ onGenerated, onSessionExpired }: UseGenerati
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const payload = {
+    const payload: GenerateRequest = {
       name: form.name.trim(),
       keywords: form.keywords
         .split(",")
@@ -165,26 +181,54 @@ export function useGenerationForm({ onGenerated, onSessionExpired }: UseGenerati
     });
 
     try {
-      const { response, data } = await generateCopy(payload);
+      const { response, data } = await createGenerationJob(payload);
 
       if (response.status === 401) {
         onSessionExpired("세션이 만료되었습니다. 다시 로그인해 주세요.");
         return;
       }
 
-      if (!response.ok) {
+      if (!response.ok || !data.id) {
         throw new Error(data.detail || "마케팅 문구 생성에 실패했습니다.");
       }
 
-      setResult({
-        status: "success",
-        content: data.generated_text || "",
-      });
-      if (data.id) {
-        onGenerated(data.id);
-        return;
+      for (let attempt = 0; attempt < 90; attempt += 1) {
+        const { response: jobResponse, data: job } = await fetchGenerationJob(data.id);
+
+        if (jobResponse.status === 401) {
+          onSessionExpired("세션이 만료되었습니다. 다시 로그인해 주세요.");
+          return;
+        }
+
+        if (!jobResponse.ok) {
+          throw new Error(job.detail || "생성 작업 상태를 불러오지 못했습니다.");
+        }
+
+        if (job.status === "succeeded") {
+          const generationId = job.result?.generationId || job.generationId;
+          setResult({
+            status: "success",
+            content: job.result?.generated_text || "",
+          });
+          if (generationId) {
+            onGenerated(generationId);
+            return;
+          }
+          throw new Error("저장된 생성 결과 ID를 받지 못했습니다.");
+        }
+
+        if (job.status === "failed") {
+          throw new Error(job.error?.message || "마케팅 문구 생성에 실패했습니다.");
+        }
+
+        setResult({
+          status: "loading",
+          content: describeJobStatus(job),
+        });
+        await delay(attempt < 10 ? 1_000 : 2_000);
       }
-      throw new Error(data.detail || "저장된 생성 결과 ID를 받지 못했습니다.");
+
+      throw new Error("생성 작업이 오래 걸리고 있습니다. 잠시 후 저장 글 목록에서 다시 확인해 주세요.");
     } catch (error) {
       setResult({
         status: "error",
@@ -207,4 +251,3 @@ export function useGenerationForm({ onGenerated, onSessionExpired }: UseGenerati
     handleSubmit,
   };
 }
-

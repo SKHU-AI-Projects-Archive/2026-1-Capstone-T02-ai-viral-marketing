@@ -12,7 +12,9 @@ import session = require("express-session");
 import { serverConfig } from "./config";
 import { connectDatabase } from "./db";
 import { requireAuthPage } from "./middleware/auth";
+import { createGenerationQueue } from "./queues/aiQueue";
 import { createAuthRouter } from "./routes/auth";
+import { createGenerationJobsRouter } from "./routes/generationJobs";
 import { createGenerationRouter } from "./routes/generation";
 import { createImageRouter } from "./routes/image";
 
@@ -52,7 +54,8 @@ function sendFrontendEntry(req: Request, res: Response): void {
 }
 
 async function bootstrap(): Promise<void> {
-  const { usersCollection, generationsCollection } = await connectDatabase(mongoUrl);
+  const { usersCollection, generationsCollection, jobsCollection } = await connectDatabase(mongoUrl);
+  const generationQueue = createGenerationQueue();
 
   app.use(
     helmet({
@@ -83,6 +86,7 @@ async function bootstrap(): Promise<void> {
 
   app.use(express.static(frontendDistPath));
   app.use("/api", createAuthRouter(usersCollection));
+  app.use("/api", createGenerationJobsRouter(jobsCollection, generationQueue));
   app.use("/api", createGenerationRouter(generationsCollection));
   app.use("/api", createImageRouter());
 

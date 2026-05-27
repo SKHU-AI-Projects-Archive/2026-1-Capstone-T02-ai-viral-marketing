@@ -104,6 +104,7 @@ CHROMA_DB_PATH=.chroma
 MONGO_DB=mongodb+srv://...
 SESSION_SECRET=change-this-secret
 FASTAPI_BASE_URL=http://127.0.0.1:8000
+REDIS_URL=redis://127.0.0.1:6379
 PORT=3000
 ```
 
@@ -116,6 +117,7 @@ PORT=3000
 - `MONGO_DB`: MongoDB 연결 문자열
 - `SESSION_SECRET`: 세션 서명용 비밀값
 - `FASTAPI_BASE_URL`: Node 서버가 호출할 FastAPI 주소
+- `REDIS_URL`: BullMQ 작업 큐가 사용할 Redis 주소, 기본값 `redis://127.0.0.1:6379`
 - `PORT`: Node 서버 포트, 기본값 `3000`
 
 ## 설치
@@ -167,7 +169,23 @@ cd ..
 
 ## 서버 켜는 방법
 
-서버는 2개를 켜야 합니다.
+서버는 기본적으로 FastAPI, Node 인증 서버, Node worker를 켜야 합니다. 개발 중에는 `npm.cmd run dev`로 한 번에 실행할 수 있습니다.
+
+비동기 생성 작업은 Redis 기반 BullMQ 큐를 사용하므로 Redis가 먼저 실행되어 있어야 합니다.
+
+### Redis 실행
+
+로컬 Redis를 실행합니다. Windows 환경에서는 Docker 사용을 권장합니다.
+
+```powershell
+docker run --name ovms-redis -p 6379:6379 -d redis:7
+```
+
+이미 컨테이너가 있으면:
+
+```powershell
+docker start ovms-redis
+```
 
 ### 터미널 1: FastAPI AI 서버 실행
 
@@ -202,6 +220,23 @@ http://127.0.0.1:3000
 ```
 
 PowerShell에서 `npm start`가 꼬이거나 `npm.ps1` 관련 문제가 나면 `npm.cmd start`를 사용하면 됩니다.
+
+### 터미널 3: Node 생성 worker 실행
+
+```powershell
+cd C:\2026-1-Capstone-T02-ai-viral-marketing
+npm.cmd run worker
+```
+
+worker는 Redis 큐에서 생성 job을 가져와 FastAPI를 호출하고, 성공 결과를 MongoDB `generations` 컬렉션에 저장합니다.
+
+### 개발 서버 한 번에 실행
+
+```powershell
+npm.cmd run dev
+```
+
+이 명령은 FastAPI, Node 인증 서버, Node worker, Vite 프론트엔드를 함께 실행합니다. Redis는 별도로 먼저 실행되어 있어야 합니다.
 
 ### 브라우저 접속
 
@@ -374,7 +409,16 @@ python -m compileall backend
   - 로그아웃
 - `POST /api/generate`
   - 로그인 필요
-  - 마케팅 문구 생성
+  - 기존 동기 마케팅 문구 생성 API
+- `POST /api/generation-jobs`
+  - 로그인 필요
+  - 비동기 마케팅 문구 생성 job 생성
+- `GET /api/generation-jobs/:id`
+  - 로그인 필요
+  - 생성 job 상태 조회
+- `POST /api/generation-jobs/:id/retry`
+  - 로그인 필요
+  - 실패한 생성 job 재시도
 - `POST /api/analyze-image`
   - 로그인 필요
   - 이미지 분석
@@ -395,9 +439,11 @@ python -m compileall backend
 3. 회원가입/로그인은 Node 서버에서 처리합니다.
 4. 로그인 성공 시 MongoDB 세션이 저장됩니다.
 5. 사용자가 문구 생성 또는 이미지 분석을 요청하면 Node 서버가 세션을 검사합니다.
-6. 인증된 요청만 FastAPI 내부 API로 전달됩니다.
-7. FastAPI가 Gemini/ChromaDB 로직을 처리한 뒤 결과를 Node 서버에 반환합니다.
-8. Node 서버가 브라우저에 최종 응답을 전달합니다.
+6. 문구 생성 요청은 Node 서버가 `ai_jobs`에 job을 만들고 Redis 큐에 등록합니다.
+7. Node worker가 Redis 큐에서 job을 가져와 FastAPI 내부 API로 전달합니다.
+8. FastAPI가 Gemini/ChromaDB 로직을 처리한 뒤 결과를 worker에 반환합니다.
+9. worker가 결과를 MongoDB `generations`에 저장하고 job 상태를 `succeeded`로 갱신합니다.
+10. 프론트엔드는 job 상태를 polling해 완료되면 저장 상세 화면으로 이동합니다.
 
 ## 문제 해결
 
