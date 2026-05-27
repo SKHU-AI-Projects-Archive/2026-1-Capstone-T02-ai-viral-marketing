@@ -2,6 +2,7 @@ import express = require("express");
 import { Queue } from "bullmq";
 import { Collection } from "mongodb";
 
+import type {} from "../express-session";
 import type { AiJobRecord } from "../jobStore";
 import {
   createGenerationJob,
