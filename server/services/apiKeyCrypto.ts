@@ -11,6 +11,7 @@ type EncryptGeminiApiKeyOptions = {
   now?: Date;
   verifiedAt?: Date;
   existingCreatedAt?: Date;
+  userId?: string;
 };
 
 export type GeminiApiKeyPublicMetadata = {
@@ -53,6 +54,14 @@ export function createGeminiApiKeyPreview(apiKey: string): string {
   return normalizedApiKey.slice(-KEY_PREVIEW_LENGTH);
 }
 
+function normalizeUserIdForAad(userId: string): string {
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) {
+    throw new Error("userId is required to bind an encrypted Gemini API key.");
+  }
+  return normalizedUserId;
+}
+
 export function encryptGeminiApiKey(
   apiKey: string,
   rawSecret: string,
@@ -67,6 +76,10 @@ export function encryptGeminiApiKey(
   const encryptionKey = decodeApiKeyEncryptionSecret(rawSecret);
   const iv = randomBytes(IV_BYTES);
   const cipher = createCipheriv(ALGORITHM, encryptionKey, iv);
+  const userId = options.userId ? normalizeUserIdForAad(options.userId) : null;
+  if (userId) {
+    cipher.setAAD(Buffer.from(userId, "utf8"));
+  }
   const encryptedValue = Buffer.concat([
     cipher.update(normalizedApiKey, "utf8"),
     cipher.final(),
@@ -74,6 +87,7 @@ export function encryptGeminiApiKey(
   const authTag = cipher.getAuthTag();
 
   return {
+    ...(userId ? { version: 2 as const } : { version: 1 as const }),
     encryptedValue: encryptedValue.toString("base64"),
     iv: iv.toString("base64"),
     authTag: authTag.toString("base64"),
@@ -84,9 +98,12 @@ export function encryptGeminiApiKey(
   };
 }
 
-export function decryptGeminiApiKey(record: UserGeminiApiKey, rawSecret: string): string {
+export function decryptGeminiApiKey(record: UserGeminiApiKey, rawSecret: string, userId?: string): string {
   const encryptionKey = decodeApiKeyEncryptionSecret(rawSecret);
   const decipher = createDecipheriv(ALGORITHM, encryptionKey, Buffer.from(record.iv, "base64"));
+  if (record.version === 2) {
+    decipher.setAAD(Buffer.from(normalizeUserIdForAad(userId || ""), "utf8"));
+  }
   decipher.setAuthTag(Buffer.from(record.authTag, "base64"));
 
   return Buffer.concat([
@@ -95,8 +112,8 @@ export function decryptGeminiApiKey(record: UserGeminiApiKey, rawSecret: string)
   ]).toString("utf8");
 }
 
-export function decryptGeminiApiKeyForRequest(record: UserGeminiApiKey, rawSecret: string): string {
-  return decryptGeminiApiKey(record, rawSecret);
+export function decryptGeminiApiKeyForRequest(record: UserGeminiApiKey, rawSecret: string, userId: string): string {
+  return decryptGeminiApiKey(record, rawSecret, userId);
 }
 
 export function toGeminiApiKeyPublicMetadata(record?: UserGeminiApiKey): GeminiApiKeyPublicMetadata {

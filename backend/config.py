@@ -11,6 +11,7 @@ load_dotenv(dotenv_path=BASE_DIR / ".env", override=True)
 
 DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 DEFAULT_GEMINI_TIMEOUT_SECONDS = 110.0
+DEFAULT_INTERNAL_API_SECRET = "development-internal-api-secret"
 MIN_GENERATE_TIMEOUT_SECONDS = 15.0
 MIN_IMAGE_ANALYSIS_TIMEOUT_SECONDS = 30.0
 
@@ -20,6 +21,7 @@ class GeminiSettings:
     model: str
     generate_timeout_seconds: float
     image_timeout_seconds: float
+    internal_api_secret: str
 
 
 def _read_env(name: str) -> str:
@@ -50,6 +52,19 @@ def _parse_positive_float(name: str, default: float) -> float:
     return value
 
 
+def _read_node_env() -> str:
+    return _read_env("NODE_ENV") or "development"
+
+
+def _read_internal_api_secret() -> str:
+    secret = _read_env("INTERNAL_API_SECRET")
+    if secret:
+        return secret
+    if _read_node_env() == "production":
+        raise ValueError("production requires INTERNAL_API_SECRET to protect internal AI endpoints.")
+    return DEFAULT_INTERNAL_API_SECRET
+
+
 @lru_cache(maxsize=1)
 def get_gemini_settings() -> GeminiSettings:
     base_timeout = _parse_positive_float("GEMINI_TIMEOUT_SECONDS", DEFAULT_GEMINI_TIMEOUT_SECONDS)
@@ -60,4 +75,5 @@ def get_gemini_settings() -> GeminiSettings:
         model=_normalize_model_name(_read_env("GEMINI_MODEL") or DEFAULT_GEMINI_MODEL),
         generate_timeout_seconds=max(generate_timeout, MIN_GENERATE_TIMEOUT_SECONDS),
         image_timeout_seconds=max(image_timeout, MIN_IMAGE_ANALYSIS_TIMEOUT_SECONDS),
+        internal_api_secret=_read_internal_api_secret(),
     )

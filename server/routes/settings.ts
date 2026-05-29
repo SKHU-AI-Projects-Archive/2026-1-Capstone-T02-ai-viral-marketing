@@ -1,9 +1,10 @@
 import express = require("express");
-import { Collection, ObjectId, type Filter } from "mongodb";
+import { Collection, ObjectId } from "mongodb";
 
 import type {} from "../express-session";
 import type { UserRecord } from "../db";
 import { requireAuth, requireCsrfToken } from "../middleware/auth";
+import { settingsRateLimit } from "../middleware/rateLimit";
 import {
   encryptGeminiApiKey,
   toGeminiApiKeySettingsMetadata,
@@ -12,20 +13,36 @@ import {
 type Request = express.Request;
 type Response = express.Response;
 
-const MIN_GEMINI_API_KEY_LENGTH = 12;
+const MIN_GEMINI_API_KEY_LENGTH = 20;
+const MAX_GEMINI_API_KEY_LENGTH = 256;
+const invalidGeminiApiKeyMessage = "Gemini API 키를 올바르게 입력해 주세요.";
 
-function getSessionUserFilter(req: Request): Filter<UserRecord> | null {
+function getSessionUserId(req: Request): ObjectId | null {
   const userId = String(req.session.user?.id || "");
   if (!ObjectId.isValid(userId)) {
     return null;
   }
 
-  return { _id: new ObjectId(userId) } as Filter<UserRecord>;
+  return new ObjectId(userId);
 }
 
 function readApiKey(body: unknown): string {
   const payload = body as { apiKey?: unknown; geminiApiKey?: unknown } | null;
-  return String(payload?.apiKey ?? payload?.geminiApiKey ?? "").trim();
+  const value = payload?.apiKey ?? payload?.geminiApiKey;
+  if (typeof value !== "string") {
+    return "";
+  }
+  return value.trim();
+}
+
+function isValidGeminiApiKeyInput(apiKey: string): boolean {
+  if (apiKey.length < MIN_GEMINI_API_KEY_LENGTH || apiKey.length > MAX_GEMINI_API_KEY_LENGTH) {
+    return false;
+  }
+  if (/[\s\u0000-\u001f\u007f]/u.test(apiKey)) {
+    return false;
+  }
+  return /^[A-Za-z0-9_-]+$/.test(apiKey);
 }
 
 export function createSettingsRouter(
@@ -35,60 +52,73 @@ export function createSettingsRouter(
   const router = express.Router();
 
   router.get("/settings/gemini-key", requireAuth, async (req: Request, res: Response) => {
-    const userFilter = getSessionUserFilter(req);
-    if (!userFilter) {
+    const userId = getSessionUserId(req);
+    if (!userId) {
       res.status(401).json({ detail: "로그인이 필요합니다." });
       return;
     }
 
-    const user = await usersCollection.findOne(userFilter);
+    const user = await usersCollection.findOne({ _id: userId } as never);
     res.json(toGeminiApiKeySettingsMetadata(user?.geminiApiKey));
   });
 
-  router.put("/settings/gemini-key", requireAuth, requireCsrfToken, async (req: Request, res: Response) => {
-    const userFilter = getSessionUserFilter(req);
-    if (!userFilter) {
-      res.status(401).json({ detail: "로그인이 필요합니다." });
-      return;
-    }
+  router.put(
+    "/settings/gemini-key",
+    settingsRateLimit,
+    requireAuth,
+    requireCsrfToken,
+    async (req: Request, res: Response) => {
+      const userId = getSessionUserId(req);
+      if (!userId) {
+        res.status(401).json({ detail: "로그인이 필요합니다." });
+        return;
+      }
 
-    if (!userApiKeyEncryptionSecret) {
-      res.status(503).json({
-        detail: "사용자 API 키 저장을 사용할 수 없습니다. USER_API_KEY_ENCRYPTION_SECRET을 설정해 주세요.",
+      if (!userApiKeyEncryptionSecret) {
+        res.status(503).json({
+          detail: "사용자 API 키 저장을 사용할 수 없습니다. USER_API_KEY_ENCRYPTION_SECRET을 설정해 주세요.",
+        });
+        return;
+      }
+
+      const apiKey = readApiKey(req.body);
+      if (!isValidGeminiApiKeyInput(apiKey)) {
+        res.status(400).json({ detail: invalidGeminiApiKeyMessage });
+        return;
+      }
+
+      const existingUser = await usersCollection.findOne({ _id: userId } as never);
+      if (!existingUser) {
+        res.status(404).json({ detail: "사용자를 찾을 수 없습니다." });
+        return;
+      }
+
+      const encryptedApiKey = encryptGeminiApiKey(apiKey, userApiKeyEncryptionSecret, {
+        existingCreatedAt: existingUser.geminiApiKey?.createdAt,
+        userId: userId.toString(),
       });
-      return;
+      await usersCollection.updateOne({ _id: userId } as never, { $set: { geminiApiKey: encryptedApiKey } });
+
+      res.json(toGeminiApiKeySettingsMetadata(encryptedApiKey));
     }
+  );
 
-    const apiKey = readApiKey(req.body);
-    if (apiKey.length < MIN_GEMINI_API_KEY_LENGTH) {
-      res.status(400).json({ detail: "Gemini API 키를 올바르게 입력해 주세요." });
-      return;
+  router.delete(
+    "/settings/gemini-key",
+    settingsRateLimit,
+    requireAuth,
+    requireCsrfToken,
+    async (req: Request, res: Response) => {
+      const userId = getSessionUserId(req);
+      if (!userId) {
+        res.status(401).json({ detail: "로그인이 필요합니다." });
+        return;
+      }
+
+      await usersCollection.updateOne({ _id: userId } as never, { $unset: { geminiApiKey: "" } });
+      res.json(toGeminiApiKeySettingsMetadata());
     }
-
-    const existingUser = await usersCollection.findOne(userFilter);
-    if (!existingUser) {
-      res.status(404).json({ detail: "사용자를 찾을 수 없습니다." });
-      return;
-    }
-
-    const encryptedApiKey = encryptGeminiApiKey(apiKey, userApiKeyEncryptionSecret, {
-      existingCreatedAt: existingUser.geminiApiKey?.createdAt,
-    });
-    await usersCollection.updateOne(userFilter, { $set: { geminiApiKey: encryptedApiKey } });
-
-    res.json(toGeminiApiKeySettingsMetadata(encryptedApiKey));
-  });
-
-  router.delete("/settings/gemini-key", requireAuth, requireCsrfToken, async (req: Request, res: Response) => {
-    const userFilter = getSessionUserFilter(req);
-    if (!userFilter) {
-      res.status(401).json({ detail: "로그인이 필요합니다." });
-      return;
-    }
-
-    await usersCollection.updateOne(userFilter, { $unset: { geminiApiKey: "" } });
-    res.json(toGeminiApiKeySettingsMetadata());
-  });
+  );
 
   return router;
 }

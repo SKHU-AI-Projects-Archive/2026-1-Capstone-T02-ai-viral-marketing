@@ -8,18 +8,30 @@ import {
 } from "./services/apiKeyCrypto";
 
 const TEST_SECRET = Buffer.from("12345678901234567890123456789012", "utf8").toString("base64");
+const USER_ID = "66507f3a9eac2a7f0d2f0001";
+const OTHER_USER_ID = "66507f3a9eac2a7f0d2f0002";
 
 describe("apiKeyCrypto", () => {
   it("encrypts and decrypts Gemini API keys without storing plaintext", () => {
     const apiKey = "AIza-test-user-secret-key";
     const now = new Date("2026-05-29T00:00:00.000Z");
 
-    const encrypted = encryptGeminiApiKey(apiKey, TEST_SECRET, { now });
+    const encrypted = encryptGeminiApiKey(apiKey, TEST_SECRET, { now, userId: USER_ID });
 
+    expect(encrypted.version).toBe(2);
     expect(encrypted.encryptedValue).not.toContain(apiKey);
     expect(encrypted.keyPreview).toBe("-key");
     expect(encrypted.createdAt).toBe(now);
     expect(encrypted.updatedAt).toBe(now);
+    expect(decryptGeminiApiKey(encrypted, TEST_SECRET, USER_ID)).toBe(apiKey);
+    expect(() => decryptGeminiApiKey(encrypted, TEST_SECRET, OTHER_USER_ID)).toThrow();
+  });
+
+  it("keeps read compatibility for legacy v1 records", () => {
+    const apiKey = "AIza-legacy-user-secret-key";
+    const encrypted = encryptGeminiApiKey(apiKey, TEST_SECRET);
+
+    expect(encrypted.version).toBe(1);
     expect(decryptGeminiApiKey(encrypted, TEST_SECRET)).toBe(apiKey);
   });
 
@@ -32,6 +44,7 @@ describe("apiKeyCrypto", () => {
       now: updatedAt,
       existingCreatedAt: createdAt,
       verifiedAt,
+      userId: USER_ID,
     });
 
     expect(encrypted.createdAt).toBe(createdAt);
@@ -40,7 +53,7 @@ describe("apiKeyCrypto", () => {
   });
 
   it("returns public metadata without exposing encrypted values", () => {
-    const encrypted = encryptGeminiApiKey("AIza-test-user-secret-key", TEST_SECRET);
+    const encrypted = encryptGeminiApiKey("AIza-test-user-secret-key", TEST_SECRET, { userId: USER_ID });
 
     const metadata = toGeminiApiKeyPublicMetadata(encrypted);
 

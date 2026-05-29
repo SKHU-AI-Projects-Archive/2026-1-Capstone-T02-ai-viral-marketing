@@ -3,6 +3,9 @@ from fastapi.testclient import TestClient
 from backend import main
 
 
+INTERNAL_HEADERS = {"X-Internal-API-Secret": "development-internal-api-secret"}
+
+
 def test_internal_generate_passes_gemini_api_key_override(monkeypatch):
     seen_kwargs = {}
 
@@ -15,6 +18,7 @@ def test_internal_generate_passes_gemini_api_key_override(monkeypatch):
 
     response = client.post(
         "/internal/generate",
+        headers=INTERNAL_HEADERS,
         json={
             "name": "텀블러",
             "keywords": ["보온"],
@@ -45,6 +49,7 @@ def test_internal_analyze_image_passes_gemini_api_key_override(monkeypatch):
 
     response = client.post(
         "/internal/analyze-image",
+        headers=INTERNAL_HEADERS,
         files={"file": ("product.png", b"image-bytes", "image/png")},
         data={"geminiApiKeyOverride": "user-gemini-key"},
     )
@@ -52,3 +57,25 @@ def test_internal_analyze_image_passes_gemini_api_key_override(monkeypatch):
     assert response.status_code == 200
     assert response.json()["recommendedSummary"] == "분석 결과"
     assert seen_kwargs["api_key_override"] == "user-gemini-key"
+
+
+def test_internal_generate_rejects_missing_internal_secret(monkeypatch):
+    def fake_generate_marketing_text(**_kwargs):
+        raise AssertionError("internal auth should run before generation")
+
+    monkeypatch.setattr(main, "generate_marketing_text", fake_generate_marketing_text)
+    client = TestClient(main.app)
+
+    response = client.post(
+        "/internal/generate",
+        json={
+            "name": "product",
+            "keywords": ["keyword"],
+            "summary": "summary",
+            "tone": "blog",
+            "geminiApiKeyOverride": "user-gemini-key",
+        },
+    )
+
+    assert response.status_code == 403
+    assert "user-gemini-key" not in response.text

@@ -104,7 +104,7 @@ describe("processGenerationJob", () => {
       email: "alpha@example.com",
       passwordHash: "hash",
       createdAt: new Date("2026-05-28T00:00:00.000Z"),
-      geminiApiKey: encryptGeminiApiKey(apiKey, TEST_API_KEY_SECRET),
+      geminiApiKey: encryptGeminiApiKey(apiKey, TEST_API_KEY_SECRET, { userId: userId.toString() }),
     });
     collections.jobsCollection.records.push(job);
     vi.mocked(postFastApiJson).mockResolvedValue(

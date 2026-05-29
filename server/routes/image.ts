@@ -47,7 +47,11 @@ export function createImageRouter(
           return;
         }
 
-        const geminiApiKeyOverride = decryptGeminiApiKeyForRequest(userGeminiApiKey, userApiKeyEncryptionSecret);
+        const geminiApiKeyOverride = decryptGeminiApiKeyForRequest(
+          userGeminiApiKey,
+          userApiKeyEncryptionSecret,
+          req.session.user!.id
+        );
         const formData = new FormData();
         const blob = new Blob([new Uint8Array(req.file.buffer)], { type: req.file.mimetype });
         formData.append("file", blob, req.file.originalname);

@@ -4,6 +4,7 @@ import { GenerationRecord, ensureGenerationIndexes } from "./generationStore";
 import { AiJobRecord, ensureJobIndexes } from "./jobStore";
 
 export type UserGeminiApiKey = {
+  version?: 1 | 2;
   encryptedValue: string;
   iv: string;
   authTag: string;

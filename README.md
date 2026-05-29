@@ -72,6 +72,7 @@ CHROMA_DB_PATH=.chroma
 MONGO_DB=mongodb+srv://...
 SESSION_SECRET=change-this-secret
 USER_API_KEY_ENCRYPTION_SECRET=base64_or_hex_encoded_32_byte_secret
+INTERNAL_API_SECRET=change-this-internal-secret
 FASTAPI_BASE_URL=http://127.0.0.1:8000
 FRONTEND_DEV_URL=http://127.0.0.1:5173
 REDIS_URL=redis://127.0.0.1:6379
@@ -88,6 +89,7 @@ PORT=3000
 - `MONGO_DB`: MongoDB 연결 문자열
 - `SESSION_SECRET`: 세션 서명용 비밀값
 - `USER_API_KEY_ENCRYPTION_SECRET`: 사용자별 Gemini API 키 암호화용 32바이트 secret, base64 또는 64자 hex 형식
+- `INTERNAL_API_SECRET`: Express와 FastAPI 내부 API 호출을 보호하는 shared secret
 - `FASTAPI_BASE_URL`: Express 서버가 호출할 FastAPI 주소
 - `FRONTEND_DEV_URL`: 개발 중 Vite dev server 주소
 - `REDIS_URL`: BullMQ 작업 큐용 Redis 주소
@@ -95,6 +97,7 @@ PORT=3000
 
 `NODE_ENV=production`에서는 기본 `SESSION_SECRET`을 사용할 수 없으며 서버 시작이 실패합니다.
 `NODE_ENV=production`에서는 `USER_API_KEY_ENCRYPTION_SECRET`도 반드시 설정해야 합니다.
+`NODE_ENV=production`에서는 `INTERNAL_API_SECRET`도 반드시 설정해야 합니다.
 개발 환경에서 이 값이 없으면 사용자별 API 키 저장 기능은 비활성화되고 서버 로그에 설정 안내가 출력됩니다.
 
 ## 설치
@@ -337,11 +340,15 @@ docker start ovms-redis
 
 ```env
 USER_API_KEY_ENCRYPTION_SECRET=base64_or_hex_encoded_32_byte_secret
+INTERNAL_API_SECRET=change-this-internal-secret
 ```
 
 - `USER_API_KEY_ENCRYPTION_SECRET`: 사용자별 Gemini API 키 암호화용 32바이트 secret입니다. base64 또는 64자 hex 형식으로 설정합니다. `NODE_ENV=production`에서는 이 값이 없으면 Express 서버 시작이 실패합니다.
+- `INTERNAL_API_SECRET`: Express가 FastAPI `/internal/*` 엔드포인트를 호출할 때 보내는 내부 인증 secret입니다. `NODE_ENV=production`에서는 Express와 FastAPI 양쪽에 같은 값으로 설정해야 합니다.
 - 사용자가 설정 화면에서 Gemini API 키를 등록해야 문구 생성과 이미지 분석을 사용할 수 있습니다. 키가 없으면 “설정에서 Gemini API 키를 등록해 주세요.” 안내와 함께 요청이 거부됩니다.
 - 서버 공용 `GEMINI_API_KEY` fallback은 사용하지 않습니다. `.env`에 `GEMINI_API_KEY`를 설정하지 마세요.
+
+신규 저장되는 사용자 API 키 암호문은 AES-256-GCM v2 레코드로 저장되며, `userId`를 AAD에 포함해 다른 사용자 문서로 암호문을 복사해도 복호화되지 않도록 바인딩합니다. 기존 v1 레코드는 읽기 호환을 유지하지만, 사용자가 키를 다시 저장하면 v2 형식으로 갱신됩니다.
 
 암호화 secret 생성 예:
 

@@ -1,7 +1,10 @@
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from hmac import compare_digest
+
+from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import PlainTextResponse
 
 from backend.ai import analyze_product_image, generate_marketing_text
+from backend.config import get_gemini_settings
 from backend.schemas import AnalyzeImageResponse, GenerateRequest, GenerateResponse
 
 
@@ -10,6 +13,12 @@ ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 ALLOWED_IMAGE_TYPE_LABEL = "JPG, PNG, WEBP"
 
 app = FastAPI(title="OVMS AI Service")
+
+
+def verify_internal_api_secret(x_internal_api_secret: str | None) -> None:
+    expected_secret = get_gemini_settings().internal_api_secret
+    if not x_internal_api_secret or not compare_digest(x_internal_api_secret, expected_secret):
+        raise HTTPException(status_code=403, detail="내부 AI API 인증에 실패했습니다.")
 
 
 def _model_to_dict(value):
@@ -35,7 +44,11 @@ def read_root() -> str:
 
 
 @app.post("/internal/generate", response_model=GenerateResponse)
-def generate_copy(payload: GenerateRequest) -> GenerateResponse:
+def generate_copy(
+    payload: GenerateRequest,
+    x_internal_api_secret: str | None = Header(default=None),
+) -> GenerateResponse:
+    verify_internal_api_secret(x_internal_api_secret)
     try:
         generated_text = generate_marketing_text(
             name=payload.name,
@@ -61,7 +74,9 @@ def generate_copy(payload: GenerateRequest) -> GenerateResponse:
 async def analyze_image(
     file: UploadFile = File(...),
     geminiApiKeyOverride: str | None = Form(default=None),
+    x_internal_api_secret: str | None = Header(default=None),
 ) -> AnalyzeImageResponse:
+    verify_internal_api_secret(x_internal_api_secret)
     if file.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(
             status_code=400,

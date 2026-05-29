@@ -24,6 +24,7 @@ export function postFastApiJson(pathname: string, body: unknown): Promise<global
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      "X-Internal-API-Secret": serverConfig.internalApiSecret,
     },
     body: JSON.stringify(body),
   });
@@ -32,6 +33,9 @@ export function postFastApiJson(pathname: string, body: unknown): Promise<global
 export function postFastApiForm(pathname: string, body: FormData): Promise<globalThis.Response> {
   return fetch(`${serverConfig.fastApiBaseUrl}${pathname}`, {
     method: "POST",
+    headers: {
+      "X-Internal-API-Secret": serverConfig.internalApiSecret,
+    },
     body,
   });
 }

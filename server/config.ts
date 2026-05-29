@@ -9,6 +9,7 @@ const DEFAULT_SESSION_SECRET = "replace-this-session-secret";
 const DEFAULT_FASTAPI_BASE_URL = "http://127.0.0.1:8000";
 const DEFAULT_FRONTEND_DEV_URL = "http://127.0.0.1:5173";
 const DEFAULT_REDIS_URL = "redis://127.0.0.1:6379";
+const DEFAULT_INTERNAL_API_SECRET = "development-internal-api-secret";
 const USER_API_KEY_ENCRYPTION_SECRET_BYTES = 32;
 
 export type ServerConfig = {
@@ -20,6 +21,7 @@ export type ServerConfig = {
   frontendDevUrl: string;
   redisUrl: string;
   userApiKeyEncryptionSecret: string | null;
+  internalApiSecret: string;
 };
 
 function readTrimmedEnv(name: string): string {
@@ -115,6 +117,18 @@ function parseSessionSecret(nodeEnv: string): string {
   return rawSecret || DEFAULT_SESSION_SECRET;
 }
 
+function parseInternalApiSecret(nodeEnv: string): string {
+  const rawSecret = readTrimmedEnv("INTERNAL_API_SECRET");
+  if (rawSecret) {
+    return rawSecret;
+  }
+  if (nodeEnv === "production") {
+    throw new Error("production requires INTERNAL_API_SECRET to protect internal AI endpoints.");
+  }
+  console.warn("[config] INTERNAL_API_SECRET is not set. Using a development-only internal API secret.");
+  return DEFAULT_INTERNAL_API_SECRET;
+}
+
 export function loadServerConfig(): ServerConfig {
   const nodeEnv = readTrimmedEnv("NODE_ENV") || "development";
   const userApiKeyEncryptionSecret = parseUserApiKeyEncryptionSecret(nodeEnv);
@@ -128,6 +142,7 @@ export function loadServerConfig(): ServerConfig {
     frontendDevUrl: parseHttpUrl("FRONTEND_DEV_URL", readTrimmedEnv("FRONTEND_DEV_URL"), DEFAULT_FRONTEND_DEV_URL),
     redisUrl: parseRedisUrl("REDIS_URL", readTrimmedEnv("REDIS_URL"), DEFAULT_REDIS_URL),
     userApiKeyEncryptionSecret,
+    internalApiSecret: parseInternalApiSecret(nodeEnv),
   };
 }
 

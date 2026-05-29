@@ -306,7 +306,8 @@ describe("Node API", () => {
     expect(storedUser?.geminiApiKey).toBeDefined();
     expect(storedUser?.geminiApiKey?.encryptedValue).not.toContain(apiKey);
     expect(JSON.stringify(storedUser)).not.toContain(apiKey);
-    expect(decryptGeminiApiKey(storedUser!.geminiApiKey!, TEST_API_KEY_SECRET)).toBe(apiKey);
+    expect(storedUser!.geminiApiKey!.version).toBe(2);
+    expect(decryptGeminiApiKey(storedUser!.geminiApiKey!, TEST_API_KEY_SECRET, storedUser!._id.toString())).toBe(apiKey);
 
     const getResponse = await agent.get("/api/settings/gemini-key").expect(200);
     expect(getResponse.body).toMatchObject({
@@ -346,6 +347,7 @@ describe("Node API", () => {
     const { app, users } = createTestApp();
     const user = await seedUser(users, "alpha@example.com", "secret123");
     user.geminiApiKey = {
+      version: 1,
       encryptedValue: "encrypted",
       iv: "iv",
       authTag: "authTag",
@@ -399,7 +401,7 @@ describe("Node API", () => {
     const { app, users } = createTestApp();
     const user = await seedUser(users, "alpha@example.com", "secret123");
     const apiKey = "AIza-image-user-secret-key";
-    user.geminiApiKey = encryptGeminiApiKey(apiKey, TEST_API_KEY_SECRET);
+    user.geminiApiKey = encryptGeminiApiKey(apiKey, TEST_API_KEY_SECRET, { userId: user._id.toString() });
     vi.mocked(postFastApiForm).mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -518,7 +520,9 @@ describe("Node API", () => {
   it("creates generation jobs and hides them from other users", async () => {
     const { app, users, queue } = createTestApp();
     const alphaUser = await seedUser(users, "alpha@example.com", "secret123");
-    alphaUser.geminiApiKey = encryptGeminiApiKey("AIza-alpha-secret-key", TEST_API_KEY_SECRET);
+    alphaUser.geminiApiKey = encryptGeminiApiKey("AIza-alpha-secret-key", TEST_API_KEY_SECRET, {
+      userId: alphaUser._id.toString(),
+    });
     await seedUser(users, "beta@example.com", "secret123");
 
     const alpha = request.agent(app);
@@ -575,7 +579,9 @@ describe("Node API", () => {
   it("retries failed generation jobs", async () => {
     const { app, users, jobs, queue } = createTestApp();
     const user = await seedUser(users, "alpha@example.com", "secret123");
-    user.geminiApiKey = encryptGeminiApiKey("AIza-alpha-secret-key", TEST_API_KEY_SECRET);
+    user.geminiApiKey = encryptGeminiApiKey("AIza-alpha-secret-key", TEST_API_KEY_SECRET, {
+      userId: user._id.toString(),
+    });
     const failedJob = seedJob(jobs, user._id);
     const agent = request.agent(app);
     const csrfToken = await getCsrfToken(agent);

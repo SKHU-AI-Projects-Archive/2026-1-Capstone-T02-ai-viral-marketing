@@ -80,7 +80,8 @@ export async function processGenerationJob(
 
     const geminiApiKeyOverride = decryptGeminiApiKeyForRequest(
       userGeminiApiKey,
-      options.userApiKeyEncryptionSecret
+      options.userApiKeyEncryptionSecret,
+      jobRecord.userId.toString()
     );
     const upstreamResponse = await postFastApiJson("/internal/generate", {
       ...input,
