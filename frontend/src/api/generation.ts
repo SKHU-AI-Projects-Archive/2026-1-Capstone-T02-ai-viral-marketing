@@ -1,27 +1,8 @@
-import { csrfFetch } from "./csrf";
 import { readJson } from "./http";
 import type {
-  GenerateRequest,
-  GenerateResponse,
   GenerationFetchResponse,
   GenerationListResponse,
 } from "./types";
-
-export async function generateCopy(payload: GenerateRequest): Promise<{ response: Response; data: GenerateResponse }> {
-  const response = await csrfFetch("/api/generate", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-  const data = await readJson<GenerateResponse>(response, {
-    generated_text: "",
-    detail: "문구 생성 서버 응답을 읽지 못했습니다.",
-  });
-
-  return { response, data };
-}
 
 export async function fetchGeneration(id: string): Promise<{ response: Response; data: GenerationFetchResponse }> {
   const response = await fetch(`/api/generations/${id}`, { credentials: "include" });

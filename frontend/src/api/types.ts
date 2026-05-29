@@ -19,17 +19,6 @@ export type GenerateRequest = {
   imageAnalysis?: ImageAnalysis;
 };
 
-export type GenerateResponse = {
-  generated_text: string;
-  id?: string;
-  tone?: Tone;
-  imageAnalysisApplied?: boolean;
-  saveSource?: "auto";
-  createdAt?: string;
-  updatedAt?: string;
-  detail?: string;
-};
-
 export type JobStatus = "queued" | "running" | "succeeded" | "failed";
 
 export type GenerationJobResult = {

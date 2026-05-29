@@ -247,10 +247,10 @@ python -m pytest
 - `POST /api/auth/signup`: 회원가입
 - `POST /api/auth/login`: 로그인
 - `POST /api/auth/logout`: 로그아웃
-- `POST /api/generate`: 기존 동기 생성 API
-- `POST /api/generation-jobs`: 비동기 생성 job 생성
+- `POST /api/generation-jobs`: 공식 문구 생성 API. 비동기 생성 job 생성
 - `GET /api/generation-jobs/:id`: 생성 job 상태 조회
 - `POST /api/generation-jobs/:id/retry`: 실패한 생성 job 재시도
+- `POST /api/generate`: 더 이상 지원하지 않는 legacy API. `410 Gone`을 반환
 - `GET /api/generations`: 저장된 생성 결과 목록 조회
 - `GET /api/generations/:id`: 저장된 생성 결과 상세 조회
 - `POST /api/analyze-image`: 이미지 분석

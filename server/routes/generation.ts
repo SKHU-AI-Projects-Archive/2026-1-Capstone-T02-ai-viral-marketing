@@ -6,15 +6,11 @@ import { GenerationRecord } from "../generationStore";
 import {
   findGenerationForUser,
   listGenerationsForUser,
-  normalizeGenerationInput,
-  saveGeneratedArticle,
   toGenerationListItem,
   toGenerationResponse,
-  validateGenerationInput,
 } from "../generationStore";
 import { requireAuth, requireCsrfToken } from "../middleware/auth";
 import { aiRateLimit } from "../middleware/rateLimit";
-import { postFastApiJson, relayJsonResponse } from "../services/fastApiClient";
 
 type Request = express.Request;
 type Response = express.Response;
@@ -22,56 +18,10 @@ type Response = express.Response;
 export function createGenerationRouter(generationsCollection: Collection<GenerationRecord>): express.Router {
   const router = express.Router();
 
-  router.post("/generate", aiRateLimit, requireAuth, requireCsrfToken, async (req: Request, res: Response) => {
-    const input = normalizeGenerationInput(req.body);
-    const validationError = validateGenerationInput(input);
-    if (validationError) {
-      res.status(400).json({ detail: validationError });
-      return;
-    }
-
-    let upstreamResponse: globalThis.Response;
-    const sessionUser = req.session.user!;
-    try {
-      upstreamResponse = await postFastApiJson("/internal/generate", {
-        ...input,
-        userId: sessionUser.id,
-      });
-    } catch (error) {
-      console.error("[generate] FastAPI fetch failed:", error);
-      res.status(502).json({ detail: "AI 생성 서버에 연결하지 못했습니다." });
-      return;
-    }
-
-    const contentType = upstreamResponse.headers.get("content-type") || "";
-    if (!upstreamResponse.ok || !contentType.includes("application/json")) {
-      await relayJsonResponse(upstreamResponse, res);
-      return;
-    }
-
-    const data = (await upstreamResponse.json()) as { generated_text?: string };
-    const generatedText = data.generated_text || "";
-
-    try {
-      const savedGeneration = await saveGeneratedArticle(
-        generationsCollection,
-        sessionUser.id,
-        input,
-        generatedText
-      );
-
-      console.log(
-        `[generate] auto-saved generation ${savedGeneration._id.toString()} for user ${sessionUser.id}`
-      );
-
-      res.status(upstreamResponse.status).json(toGenerationResponse(savedGeneration));
-    } catch (error) {
-      console.error("[generate] Mongo insert failed:", error);
-      res.status(500).json({
-        generated_text: generatedText,
-        detail: "결과 저장에 실패했습니다. 생성된 텍스트는 응답에 포함됩니다.",
-      });
-    }
+  router.post("/generate", aiRateLimit, requireAuth, requireCsrfToken, async (_req: Request, res: Response) => {
+    res.status(410).json({
+      detail: "동기 생성 API는 더 이상 지원하지 않습니다. POST /api/generation-jobs를 사용해 주세요.",
+    });
   });
 
   router.get("/generations", requireAuth, async (req: Request, res: Response) => {

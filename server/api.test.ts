@@ -311,6 +311,28 @@ describe("Node API", () => {
     await beta.get(`/api/generation-jobs/${created.body.id}`).expect(404);
   });
 
+  it("returns 410 for the legacy synchronous generation API", async () => {
+    const { app, users } = createTestApp();
+    await seedUser(users, "alpha@example.com", "secret123");
+
+    const agent = request.agent(app);
+    const csrfToken = await getCsrfToken(agent);
+    await agent
+      .post("/api/auth/login")
+      .set("X-CSRF-Token", csrfToken)
+      .send({ email: "alpha@example.com", password: "secret123" })
+      .expect(200);
+    const nextCsrfToken = await getCsrfToken(agent);
+
+    const response = await agent
+      .post("/api/generate")
+      .set("X-CSRF-Token", nextCsrfToken)
+      .send({ name: "상품", keywords: ["키워드"], summary: "요약", tone: "blog" })
+      .expect(410);
+
+    expect(response.body.detail).toContain("/api/generation-jobs");
+  });
+
   it("retries failed generation jobs", async () => {
     const { app, users, jobs, queue } = createTestApp();
     const user = await seedUser(users, "alpha@example.com", "secret123");
