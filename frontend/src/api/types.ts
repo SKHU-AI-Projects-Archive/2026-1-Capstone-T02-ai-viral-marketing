@@ -92,3 +92,11 @@ export type CsrfTokenResponse = {
   csrfToken: string;
   detail?: string;
 };
+
+export type GeminiKeySettings = {
+  configured: boolean;
+  keyPreview?: string;
+  updatedAt?: string;
+  verifiedAt?: string;
+  detail?: string;
+};

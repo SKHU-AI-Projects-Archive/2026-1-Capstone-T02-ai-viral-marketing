@@ -5,11 +5,13 @@ import { useAuth } from "./hooks/useAuth";
 import { AuthPage } from "./pages/AuthPage";
 import { GeneratePage } from "./pages/GeneratePage";
 import { SavedGenerationsPage } from "./pages/SavedGenerationsPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { SharedResultPage } from "./pages/SharedResultPage";
 
 function isProtectedPath(pathname: string): boolean {
   return (
     pathname === "/generate" ||
+    pathname === "/settings" ||
     pathname === "/generations" ||
     pathname.startsWith("/generations/")
   );
@@ -64,6 +66,7 @@ export function App() {
   const isHomeActive = location.pathname === "/";
   const isGenerateActive = location.pathname === "/generate";
   const isGenerationsActive = location.pathname === "/generations" || location.pathname.startsWith("/generations/");
+  const isSettingsActive = location.pathname === "/settings";
   const isLoginActive = location.pathname === "/login";
   const isSignupActive = location.pathname === "/signup";
 
@@ -188,6 +191,16 @@ export function App() {
                 저장 글
               </button>
             ) : null}
+            {authUser ? (
+              <button
+                className={navClassName(isSettingsActive)}
+                type="button"
+                aria-current={isSettingsActive ? "page" : undefined}
+                onClick={() => navigate("/settings")}
+              >
+                설정
+              </button>
+            ) : null}
             {!authUser ? (
               <>
                 <button
@@ -263,6 +276,10 @@ export function App() {
             }
           />
           <Route path="/generations" element={<SavedGenerationsPage authStatus={authStatus} />} />
+          <Route
+            path="/settings"
+            element={<SettingsPage authStatus={authStatus} onSessionExpired={markGuest} />}
+          />
           <Route path="/generations/:id" element={<SharedResultPage authStatus={authStatus} />} />
           <Route path="/result" element={<LegacyResultRedirect />} />
           <Route path="/result/:id" element={<LegacyResultRedirect />} />
