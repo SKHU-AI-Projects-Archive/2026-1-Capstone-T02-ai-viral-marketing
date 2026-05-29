@@ -110,4 +110,59 @@ describe("settings page", () => {
     });
     expect(screen.getByText("wxyz")).toBeInTheDocument();
   });
+
+  it("deletes the saved Gemini API key from the settings page", async () => {
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/auth/session") {
+        return Promise.resolve(
+          jsonResponse({
+            authenticated: true,
+            user: { id: "user-1", name: "테스터", email: "tester@example.com" },
+          })
+        );
+      }
+      if (url === "/api/csrf-token") {
+        return Promise.resolve(jsonResponse({ csrfToken: "token" }));
+      }
+      if (url === "/api/settings/gemini-key" && init?.method === "DELETE") {
+        return Promise.resolve(
+          jsonResponse({
+            configured: false,
+            serverFallbackEnabled: true,
+            requireUserGeminiApiKey: false,
+          })
+        );
+      }
+      if (url === "/api/settings/gemini-key") {
+        return Promise.resolve(
+          jsonResponse({
+            configured: true,
+            keyPreview: "wxyz",
+            updatedAt: "2026-05-29T00:00:00.000Z",
+            serverFallbackEnabled: true,
+            requireUserGeminiApiKey: false,
+          })
+        );
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/settings"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("wxyz")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "삭제" }));
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/settings/gemini-key",
+        expect.objectContaining({ method: "DELETE" })
+      );
+    });
+    expect(await screen.findByText("등록되지 않음")).toBeInTheDocument();
+  });
 });

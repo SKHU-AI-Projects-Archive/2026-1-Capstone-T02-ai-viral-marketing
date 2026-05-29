@@ -307,6 +307,7 @@ describe("Node API", () => {
     const storedUser = users.records.find((record) => record.email === "alpha@example.com");
     expect(storedUser?.geminiApiKey).toBeDefined();
     expect(storedUser?.geminiApiKey?.encryptedValue).not.toContain(apiKey);
+    expect(JSON.stringify(storedUser)).not.toContain(apiKey);
     expect(decryptGeminiApiKey(storedUser!.geminiApiKey!, TEST_API_KEY_SECRET)).toBe(apiKey);
 
     const getResponse = await agent.get("/api/settings/gemini-key").expect(200);
