@@ -17,6 +17,7 @@ import { createAuthRouter } from "./routes/auth";
 import { createGenerationJobsRouter } from "./routes/generationJobs";
 import { createGenerationRouter } from "./routes/generation";
 import { createImageRouter } from "./routes/image";
+import { createSettingsRouter } from "./routes/settings";
 
 type Request = express.Request;
 type Response = express.Response;
@@ -89,6 +90,7 @@ async function bootstrap(): Promise<void> {
   app.use("/api", createGenerationJobsRouter(jobsCollection, generationQueue));
   app.use("/api", createGenerationRouter(generationsCollection));
   app.use("/api", createImageRouter());
+  app.use("/api", createSettingsRouter(usersCollection, serverConfig.userApiKeyEncryptionSecret));
 
   app.get(
     ["/generate", "/result", "/result/:id", "/generations", "/generations/:id"],

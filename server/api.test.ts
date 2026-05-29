@@ -13,23 +13,49 @@ import type { AiJobRecord } from "./jobStore";
 import { createAuthRouter } from "./routes/auth";
 import { createGenerationRouter } from "./routes/generation";
 import { createGenerationJobsRouter } from "./routes/generationJobs";
+import { createSettingsRouter } from "./routes/settings";
+import { decryptGeminiApiKey } from "./services/apiKeyCrypto";
 
 type UserDocument = WithId<UserRecord>;
 type GenerationDocument = WithId<GenerationRecord>;
 type JobDocument = WithId<AiJobRecord>;
 type TestAgent = ReturnType<typeof request.agent>;
+const TEST_API_KEY_SECRET = Buffer.from("12345678901234567890123456789012", "utf8").toString("base64");
 
 class FakeUsersCollection {
   readonly records: UserDocument[] = [];
 
-  async findOne(query: Partial<UserRecord>): Promise<UserDocument | null> {
-    return this.records.find((record) => record.email === query.email) ?? null;
+  async findOne(query: Partial<UserRecord> & { _id?: ObjectId }): Promise<UserDocument | null> {
+    return (
+      this.records.find((record) => {
+        const sameEmail = !query.email || record.email === query.email;
+        const sameId = !query._id || record._id.equals(query._id);
+        return sameEmail && sameId;
+      }) ?? null
+    );
   }
 
   async insertOne(document: UserRecord): Promise<{ insertedId: ObjectId }> {
     const insertedId = new ObjectId();
     this.records.push({ ...document, _id: insertedId });
     return { insertedId };
+  }
+
+  async updateOne(
+    query: Partial<UserRecord> & { _id?: ObjectId },
+    update: { $set?: Partial<UserRecord>; $unset?: Record<string, string> }
+  ): Promise<void> {
+    const record = await this.findOne(query);
+    if (!record) return;
+
+    if (update.$set) {
+      Object.assign(record, update.$set);
+    }
+    if (update.$unset) {
+      for (const key of Object.keys(update.$unset)) {
+        delete (record as unknown as Record<string, unknown>)[key];
+      }
+    }
   }
 }
 
@@ -116,6 +142,7 @@ function createTestApp(
   app.use("/api", createAuthRouter(users as never));
   app.use("/api", createGenerationJobsRouter(jobs as never, queue as never));
   app.use("/api", createGenerationRouter(generations as never));
+  app.use("/api", createSettingsRouter(users as never, TEST_API_KEY_SECRET));
   return { app, users, generations, jobs, queue };
 }
 
@@ -223,6 +250,103 @@ describe("Node API", () => {
       .expect(200);
 
     expect(response.body.user).toMatchObject({ email: "user@example.com" });
+  });
+
+  it("stores the authenticated user's Gemini API key encrypted and never returns plaintext", async () => {
+    const { app, users } = createTestApp();
+    await seedUser(users, "alpha@example.com", "secret123");
+    const apiKey = "AIza-test-user-secret-key";
+
+    const agent = request.agent(app);
+    const csrfToken = await getCsrfToken(agent);
+    await agent
+      .post("/api/auth/login")
+      .set("X-CSRF-Token", csrfToken)
+      .send({ email: "alpha@example.com", password: "secret123" })
+      .expect(200);
+    const nextCsrfToken = await getCsrfToken(agent);
+
+    const updateResponse = await agent
+      .put("/api/settings/gemini-key")
+      .set("X-CSRF-Token", nextCsrfToken)
+      .send({ apiKey })
+      .expect(200);
+
+    expect(updateResponse.body).toMatchObject({
+      configured: true,
+      keyPreview: "-key",
+    });
+    expect(updateResponse.body).toHaveProperty("updatedAt");
+    expect(updateResponse.body).not.toHaveProperty("apiKey");
+    expect(updateResponse.text).not.toContain(apiKey);
+
+    const storedUser = users.records.find((record) => record.email === "alpha@example.com");
+    expect(storedUser?.geminiApiKey).toBeDefined();
+    expect(storedUser?.geminiApiKey?.encryptedValue).not.toContain(apiKey);
+    expect(decryptGeminiApiKey(storedUser!.geminiApiKey!, TEST_API_KEY_SECRET)).toBe(apiKey);
+
+    const getResponse = await agent.get("/api/settings/gemini-key").expect(200);
+    expect(getResponse.body).toMatchObject({
+      configured: true,
+      keyPreview: "-key",
+    });
+    expect(getResponse.body).not.toHaveProperty("createdAt");
+    expect(getResponse.body).not.toHaveProperty("encryptedValue");
+    expect(getResponse.body).not.toHaveProperty("authTag");
+    expect(getResponse.text).not.toContain(apiKey);
+  });
+
+  it("rejects obviously invalid Gemini API keys", async () => {
+    const { app, users } = createTestApp();
+    await seedUser(users, "alpha@example.com", "secret123");
+
+    const agent = request.agent(app);
+    const csrfToken = await getCsrfToken(agent);
+    await agent
+      .post("/api/auth/login")
+      .set("X-CSRF-Token", csrfToken)
+      .send({ email: "alpha@example.com", password: "secret123" })
+      .expect(200);
+    const nextCsrfToken = await getCsrfToken(agent);
+
+    const response = await agent
+      .put("/api/settings/gemini-key")
+      .set("X-CSRF-Token", nextCsrfToken)
+      .send({ apiKey: "short" })
+      .expect(400);
+
+    expect(response.body.detail).toBe("Gemini API 키를 올바르게 입력해 주세요.");
+    expect(users.records[0].geminiApiKey).toBeUndefined();
+  });
+
+  it("deletes the authenticated user's Gemini API key", async () => {
+    const { app, users } = createTestApp();
+    const user = await seedUser(users, "alpha@example.com", "secret123");
+    user.geminiApiKey = {
+      encryptedValue: "encrypted",
+      iv: "iv",
+      authTag: "authTag",
+      keyPreview: "-key",
+      createdAt: new Date("2026-05-28T00:00:00.000Z"),
+      updatedAt: new Date("2026-05-29T00:00:00.000Z"),
+    };
+
+    const agent = request.agent(app);
+    const csrfToken = await getCsrfToken(agent);
+    await agent
+      .post("/api/auth/login")
+      .set("X-CSRF-Token", csrfToken)
+      .send({ email: "alpha@example.com", password: "secret123" })
+      .expect(200);
+    const nextCsrfToken = await getCsrfToken(agent);
+
+    const response = await agent
+      .delete("/api/settings/gemini-key")
+      .set("X-CSRF-Token", nextCsrfToken)
+      .expect(200);
+
+    expect(response.body).toEqual({ configured: false });
+    expect(user.geminiApiKey).toBeUndefined();
   });
 
   it("rejects protected generation APIs without authentication", async () => {

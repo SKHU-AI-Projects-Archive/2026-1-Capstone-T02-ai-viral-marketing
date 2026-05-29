@@ -21,6 +21,13 @@ export type GeminiApiKeyPublicMetadata = {
   verifiedAt?: Date;
 };
 
+export type GeminiApiKeySettingsMetadata = {
+  configured: boolean;
+  keyPreview?: string;
+  updatedAt?: Date;
+  verifiedAt?: Date;
+};
+
 export function decodeApiKeyEncryptionSecret(rawSecret: string): Buffer {
   const secret = rawSecret.trim();
   if (!secret) {
@@ -97,6 +104,19 @@ export function toGeminiApiKeyPublicMetadata(record?: UserGeminiApiKey): GeminiA
     configured: true,
     keyPreview: record.keyPreview,
     createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    verifiedAt: record.verifiedAt,
+  };
+}
+
+export function toGeminiApiKeySettingsMetadata(record?: UserGeminiApiKey): GeminiApiKeySettingsMetadata {
+  if (!record) {
+    return { configured: false };
+  }
+
+  return {
+    configured: true,
+    keyPreview: record.keyPreview,
     updatedAt: record.updatedAt,
     verifiedAt: record.verifiedAt,
   };
