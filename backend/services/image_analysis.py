@@ -80,7 +80,11 @@ def _normalize_image_analysis(data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def analyze_product_image(image_bytes: bytes, media_type: str) -> dict[str, Any]:
+def analyze_product_image(
+    image_bytes: bytes,
+    media_type: str,
+    api_key_override: str | None = None,
+) -> dict[str, Any]:
     if not image_bytes:
         raise ValueError("Uploaded image is empty.")
 
@@ -103,6 +107,10 @@ def analyze_product_image(image_bytes: bytes, media_type: str) -> dict[str, Any]
         },
     }
 
-    generated_text = extract_generated_text(post_gemini(payload, image_analysis=True))
+    response = (
+        post_gemini(payload, image_analysis=True, api_key_override=api_key_override)
+        if api_key_override
+        else post_gemini(payload, image_analysis=True)
+    )
+    generated_text = extract_generated_text(response)
     return _normalize_image_analysis(_parse_json_object(generated_text))
-

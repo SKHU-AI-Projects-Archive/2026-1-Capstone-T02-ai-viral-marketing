@@ -89,7 +89,14 @@ async function bootstrap(): Promise<void> {
   app.use("/api", createAuthRouter(usersCollection));
   app.use("/api", createGenerationJobsRouter(jobsCollection, generationQueue));
   app.use("/api", createGenerationRouter(generationsCollection));
-  app.use("/api", createImageRouter());
+  app.use(
+    "/api",
+    createImageRouter(
+      usersCollection,
+      serverConfig.userApiKeyEncryptionSecret,
+      serverConfig.requireUserGeminiApiKey
+    )
+  );
   app.use("/api", createSettingsRouter(usersCollection, serverConfig.userApiKeyEncryptionSecret));
 
   app.get(

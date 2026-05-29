@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import PlainTextResponse
 
 from backend.ai import analyze_product_image, generate_marketing_text
@@ -58,7 +58,10 @@ def generate_copy(payload: GenerateRequest) -> GenerateResponse:
 
 
 @app.post("/internal/analyze-image", response_model=AnalyzeImageResponse)
-async def analyze_image(file: UploadFile = File(...)) -> AnalyzeImageResponse:
+async def analyze_image(
+    file: UploadFile = File(...),
+    geminiApiKeyOverride: str | None = Form(default=None),
+) -> AnalyzeImageResponse:
     if file.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(
             status_code=400,
@@ -72,7 +75,11 @@ async def analyze_image(file: UploadFile = File(...)) -> AnalyzeImageResponse:
         raise HTTPException(status_code=413, detail="이미지 파일은 4MB 이하만 업로드할 수 있습니다.")
 
     try:
-        analysis = analyze_product_image(image_bytes=image_bytes, media_type=file.content_type)
+        analysis = analyze_product_image(
+            image_bytes=image_bytes,
+            media_type=file.content_type,
+            api_key_override=geminiApiKeyOverride,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except Exception as exc:

@@ -5,7 +5,7 @@ import express = require("express");
 import session = require("express-session");
 import { ObjectId, WithId } from "mongodb";
 import request = require("supertest");
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UserRecord } from "./db";
 import type { GenerationRecord } from "./generationStore";
@@ -13,8 +13,18 @@ import type { AiJobRecord } from "./jobStore";
 import { createAuthRouter } from "./routes/auth";
 import { createGenerationRouter } from "./routes/generation";
 import { createGenerationJobsRouter } from "./routes/generationJobs";
+import { createImageRouter } from "./routes/image";
 import { createSettingsRouter } from "./routes/settings";
-import { decryptGeminiApiKey } from "./services/apiKeyCrypto";
+import { decryptGeminiApiKey, encryptGeminiApiKey } from "./services/apiKeyCrypto";
+import { postFastApiForm } from "./services/fastApiClient";
+
+vi.mock("./services/fastApiClient", async (importActual) => {
+  const actual = await importActual<typeof import("./services/fastApiClient")>();
+  return {
+    ...actual,
+    postFastApiForm: vi.fn(),
+  };
+});
 
 type UserDocument = WithId<UserRecord>;
 type GenerationDocument = WithId<GenerationRecord>;
@@ -125,7 +135,8 @@ class FakeJobsCollection {
 function createTestApp(
   users = new FakeUsersCollection(),
   generations = new FakeGenerationsCollection(),
-  jobs = new FakeJobsCollection()
+  jobs = new FakeJobsCollection(),
+  options: { requireUserGeminiApiKey?: boolean } = {}
 ) {
   const app = express();
   const queue = {
@@ -142,6 +153,7 @@ function createTestApp(
   app.use("/api", createAuthRouter(users as never));
   app.use("/api", createGenerationJobsRouter(jobs as never, queue as never));
   app.use("/api", createGenerationRouter(generations as never));
+  app.use("/api", createImageRouter(users as never, TEST_API_KEY_SECRET, options.requireUserGeminiApiKey ?? false));
   app.use("/api", createSettingsRouter(users as never, TEST_API_KEY_SECRET));
   return { app, users, generations, jobs, queue };
 }
@@ -215,6 +227,10 @@ function seedJob(jobs: FakeJobsCollection, userId: ObjectId, overrides: Partial<
 }
 
 describe("Node API", () => {
+  beforeEach(() => {
+    vi.mocked(postFastApiForm).mockReset();
+  });
+
   it("validates signup input", async () => {
     const { app } = createTestApp();
     const agent = request.agent(app);
@@ -347,6 +363,76 @@ describe("Node API", () => {
 
     expect(response.body).toEqual({ configured: false });
     expect(user.geminiApiKey).toBeUndefined();
+  });
+
+  it("uses the authenticated user's Gemini API key for image analysis without exposing it", async () => {
+    const { app, users } = createTestApp();
+    const user = await seedUser(users, "alpha@example.com", "secret123");
+    const apiKey = "AIza-image-user-secret-key";
+    user.geminiApiKey = encryptGeminiApiKey(apiKey, TEST_API_KEY_SECRET);
+    vi.mocked(postFastApiForm).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          recommendedKeywords: ["텀블러"],
+          recommendedSummary: "보온 텀블러",
+          features: {},
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }
+      )
+    );
+
+    const agent = request.agent(app);
+    const csrfToken = await getCsrfToken(agent);
+    await agent
+      .post("/api/auth/login")
+      .set("X-CSRF-Token", csrfToken)
+      .send({ email: "alpha@example.com", password: "secret123" })
+      .expect(200);
+    const nextCsrfToken = await getCsrfToken(agent);
+
+    const response = await agent
+      .post("/api/analyze-image")
+      .set("X-CSRF-Token", nextCsrfToken)
+      .attach("file", Buffer.from("image-bytes"), {
+        filename: "product.png",
+        contentType: "image/png",
+      })
+      .expect(200);
+
+    const formData = vi.mocked(postFastApiForm).mock.calls[0][1] as FormData;
+    expect(formData.get("geminiApiKeyOverride")).toBe(apiKey);
+    expect(response.text).not.toContain(apiKey);
+  });
+
+  it("rejects image analysis when user Gemini API key is required but missing", async () => {
+    const { app, users } = createTestApp(undefined, undefined, undefined, {
+      requireUserGeminiApiKey: true,
+    });
+    await seedUser(users, "alpha@example.com", "secret123");
+
+    const agent = request.agent(app);
+    const csrfToken = await getCsrfToken(agent);
+    await agent
+      .post("/api/auth/login")
+      .set("X-CSRF-Token", csrfToken)
+      .send({ email: "alpha@example.com", password: "secret123" })
+      .expect(200);
+    const nextCsrfToken = await getCsrfToken(agent);
+
+    const response = await agent
+      .post("/api/analyze-image")
+      .set("X-CSRF-Token", nextCsrfToken)
+      .attach("file", Buffer.from("image-bytes"), {
+        filename: "product.png",
+        contentType: "image/png",
+      })
+      .expect(403);
+
+    expect(response.body.detail).toContain("Gemini API 키");
+    expect(postFastApiForm).not.toHaveBeenCalled();
   });
 
   it("rejects protected generation APIs without authentication", async () => {
