@@ -333,3 +333,27 @@ docker start ovms-redis
 - `server/index.ts`는 Express 서버 엔트리포인트이므로 `.ts` 파일이 맞습니다.
 - React 컴포넌트는 `frontend/src/**/*.tsx`에 있습니다.
 - 업로드한 원본 이미지는 저장하지 않으며, 이미지 분석 결과만 문구 생성 입력으로 사용합니다.
+## 개인 Gemini API 키 운영
+
+로그인 사용자는 상단 메뉴의 설정 화면(`/settings`)에서 본인의 Gemini API 키를 등록, 조회, 삭제할 수 있습니다. 서버는 API 키 원문을 MongoDB에 저장하지 않고 `USER_API_KEY_ENCRYPTION_SECRET`으로 AES-256-GCM 암호화한 값과 마지막 4자리(`keyPreview`) 같은 metadata만 저장합니다. API 키 원문은 저장 후 다시 화면이나 API 응답으로 표시되지 않습니다.
+
+배포 환경에는 다음 값을 반드시 검토해 설정합니다.
+
+```env
+GEMINI_API_KEY=server_fallback_gemini_key
+USER_API_KEY_ENCRYPTION_SECRET=base64_or_hex_encoded_32_byte_secret
+REQUIRE_USER_GEMINI_API_KEY=true
+```
+
+- `USER_API_KEY_ENCRYPTION_SECRET`: 사용자별 Gemini API 키 암호화용 32바이트 secret입니다. base64 또는 64자 hex 형식으로 설정합니다. `NODE_ENV=production`에서는 이 값이 없으면 Express 서버 시작이 실패합니다.
+- `REQUIRE_USER_GEMINI_API_KEY=true`: 개인 API 키 필수 모드입니다. 사용자가 설정 화면에서 Gemini API 키를 등록해야 문구 생성과 이미지 분석을 사용할 수 있습니다. 키가 없으면 “설정에서 Gemini API 키를 등록해 주세요.” 안내와 함께 요청이 거부됩니다.
+- `REQUIRE_USER_GEMINI_API_KEY=false`: 서버 공용 `GEMINI_API_KEY` fallback을 허용합니다. 사용자가 개인 키를 등록하면 개인 키를 우선 사용하고, 없으면 서버 공용 키를 사용합니다.
+- `GEMINI_API_KEY`: 서버 공용 fallback 키입니다. 개인별 비용 분리와 운영 추적이 필요하면 production에서는 fallback에 의존하지 말고 `REQUIRE_USER_GEMINI_API_KEY=true`로 운영하는 것을 권장합니다.
+
+암호화 secret 생성 예:
+
+```powershell
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+secret은 배포 환경 변수 저장소에만 보관하고 저장소에 커밋하지 마세요. secret을 교체하면 기존에 암호화되어 저장된 사용자 API 키를 복호화할 수 없으므로, 교체 전 사용자 키 재등록 계획을 세워야 합니다.
