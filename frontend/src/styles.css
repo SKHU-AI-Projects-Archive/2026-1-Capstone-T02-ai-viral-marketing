@@ -1019,6 +1019,32 @@ a:focus-visible,
   gap: 10px;
 }
 
+.settings-policy,
+.settings-callout {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 8px;
+  background: rgba(15, 118, 110, 0.08);
+}
+
+.settings-policy strong,
+.settings-callout strong {
+  color: var(--accent-strong);
+}
+
+.settings-policy p,
+.settings-callout p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.settings-callout .button {
+  justify-self: start;
+}
+
 @media (max-width: 920px) {
   .layout {
     grid-template-columns: 1fr;
@@ -1128,6 +1154,10 @@ a:focus-visible,
   .settings-form__actions {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .settings-callout .button {
+    justify-self: stretch;
   }
 
   .generation-meta {

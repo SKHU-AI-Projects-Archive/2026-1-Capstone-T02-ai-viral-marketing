@@ -151,10 +151,18 @@ function createTestApp(
     })
   );
   app.use("/api", createAuthRouter(users as never));
-  app.use("/api", createGenerationJobsRouter(jobs as never, queue as never));
+  app.use(
+    "/api",
+    createGenerationJobsRouter(
+      jobs as never,
+      queue as never,
+      users as never,
+      options.requireUserGeminiApiKey ?? false
+    )
+  );
   app.use("/api", createGenerationRouter(generations as never));
   app.use("/api", createImageRouter(users as never, TEST_API_KEY_SECRET, options.requireUserGeminiApiKey ?? false));
-  app.use("/api", createSettingsRouter(users as never, TEST_API_KEY_SECRET));
+  app.use("/api", createSettingsRouter(users as never, TEST_API_KEY_SECRET, options.requireUserGeminiApiKey ?? false));
   return { app, users, generations, jobs, queue };
 }
 
@@ -361,8 +369,33 @@ describe("Node API", () => {
       .set("X-CSRF-Token", nextCsrfToken)
       .expect(200);
 
-    expect(response.body).toEqual({ configured: false });
+    expect(response.body).toMatchObject({ configured: false });
     expect(user.geminiApiKey).toBeUndefined();
+  });
+
+  it("rejects generation job creation when user Gemini API key is required but missing", async () => {
+    const { app, users, queue } = createTestApp(undefined, undefined, undefined, {
+      requireUserGeminiApiKey: true,
+    });
+    await seedUser(users, "alpha@example.com", "secret123");
+
+    const agent = request.agent(app);
+    const csrfToken = await getCsrfToken(agent);
+    await agent
+      .post("/api/auth/login")
+      .set("X-CSRF-Token", csrfToken)
+      .send({ email: "alpha@example.com", password: "secret123" })
+      .expect(200);
+    const nextCsrfToken = await getCsrfToken(agent);
+
+    const response = await agent
+      .post("/api/generation-jobs")
+      .set("X-CSRF-Token", nextCsrfToken)
+      .send({ name: "상품", keywords: ["키워드"], summary: "요약", tone: "blog" })
+      .expect(403);
+
+    expect(response.body.detail).toBe("설정에서 Gemini API 키를 등록해 주세요.");
+    expect(queue.add).not.toHaveBeenCalled();
   });
 
   it("uses the authenticated user's Gemini API key for image analysis without exposing it", async () => {

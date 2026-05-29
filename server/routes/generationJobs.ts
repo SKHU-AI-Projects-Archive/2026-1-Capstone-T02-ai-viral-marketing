@@ -3,6 +3,8 @@ import { Queue } from "bullmq";
 import { Collection } from "mongodb";
 
 import type {} from "../express-session";
+import type { UserRecord } from "../db";
+import { findUserById } from "../db";
 import type { AiJobRecord } from "../jobStore";
 import {
   createGenerationJob,
@@ -19,11 +21,27 @@ import { enqueueGenerationJob, type GenerationQueuePayload } from "../queues/aiQ
 type Request = express.Request;
 type Response = express.Response;
 
+const missingUserGeminiApiKeyDetail = "설정에서 Gemini API 키를 등록해 주세요.";
+
 export function createGenerationJobsRouter(
   jobsCollection: Collection<AiJobRecord>,
-  generationQueue: Queue<GenerationQueuePayload>
+  generationQueue: Queue<GenerationQueuePayload>,
+  usersCollection?: Collection<UserRecord>,
+  requireUserGeminiApiKey = false
 ): express.Router {
   const router = express.Router();
+
+  async function hasRequiredGeminiApiKey(userId: string): Promise<boolean> {
+    if (!requireUserGeminiApiKey) {
+      return true;
+    }
+    if (!usersCollection) {
+      return false;
+    }
+
+    const user = await findUserById(usersCollection, userId);
+    return Boolean(user?.geminiApiKey);
+  }
 
   router.post("/generation-jobs", aiRateLimit, requireAuth, requireCsrfToken, async (req: Request, res: Response) => {
     const input = normalizeGenerationInput(req.body);
@@ -34,6 +52,13 @@ export function createGenerationJobsRouter(
     }
 
     const sessionUser = req.session.user!;
+    if (!(await hasRequiredGeminiApiKey(sessionUser.id))) {
+      res.status(403).json({
+        detail: missingUserGeminiApiKeyDetail,
+      });
+      return;
+    }
+
     const job = await createGenerationJob(jobsCollection, sessionUser.id, input);
 
     try {
@@ -70,6 +95,13 @@ export function createGenerationJobsRouter(
 
     if (job.status !== "failed") {
       res.status(409).json({ detail: "실패한 생성 작업만 다시 시도할 수 있습니다." });
+      return;
+    }
+
+    if (!(await hasRequiredGeminiApiKey(sessionUser.id))) {
+      res.status(403).json({
+        detail: missingUserGeminiApiKeyDetail,
+      });
       return;
     }
 

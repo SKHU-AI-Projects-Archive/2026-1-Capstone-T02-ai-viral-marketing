@@ -30,7 +30,8 @@ function readApiKey(body: unknown): string {
 
 export function createSettingsRouter(
   usersCollection: Collection<UserRecord>,
-  userApiKeyEncryptionSecret: string | null
+  userApiKeyEncryptionSecret: string | null,
+  requireUserGeminiApiKey = false
 ): express.Router {
   const router = express.Router();
 
@@ -42,7 +43,7 @@ export function createSettingsRouter(
     }
 
     const user = await usersCollection.findOne(userFilter);
-    res.json(toGeminiApiKeySettingsMetadata(user?.geminiApiKey));
+    res.json(toGeminiApiKeySettingsMetadata(user?.geminiApiKey, { requireUserGeminiApiKey }));
   });
 
   router.put("/settings/gemini-key", requireAuth, requireCsrfToken, async (req: Request, res: Response) => {
@@ -76,7 +77,7 @@ export function createSettingsRouter(
     });
     await usersCollection.updateOne(userFilter, { $set: { geminiApiKey: encryptedApiKey } });
 
-    res.json(toGeminiApiKeySettingsMetadata(encryptedApiKey));
+    res.json(toGeminiApiKeySettingsMetadata(encryptedApiKey, { requireUserGeminiApiKey }));
   });
 
   router.delete("/settings/gemini-key", requireAuth, requireCsrfToken, async (req: Request, res: Response) => {
@@ -87,7 +88,7 @@ export function createSettingsRouter(
     }
 
     await usersCollection.updateOne(userFilter, { $unset: { geminiApiKey: "" } });
-    res.json(toGeminiApiKeySettingsMetadata());
+    res.json(toGeminiApiKeySettingsMetadata(undefined, { requireUserGeminiApiKey }));
   });
 
   return router;

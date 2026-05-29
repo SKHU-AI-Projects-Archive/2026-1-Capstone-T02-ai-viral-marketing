@@ -103,6 +103,14 @@ export function GeneratePage({ authStatus, authUser, onSessionExpired }: Generat
             status={generationForm.result.status}
             content={generationForm.result.content || "제품 정보를 입력하고 문구를 생성하면 저장된 결과 상세 화면으로 이동합니다."}
           />
+          {generationForm.needsGeminiKeySetupAction ? (
+            <section className="settings-callout" aria-live="polite">
+              <p>설정에서 Gemini API 키를 등록해 주세요.</p>
+              <button className="button button--secondary" type="button" onClick={() => navigate("/settings")}>
+                설정으로 이동
+              </button>
+            </section>
+          ) : null}
 
           <section className="recent-panel" aria-labelledby="recent-generations-title">
             <div className="recent-panel__header">

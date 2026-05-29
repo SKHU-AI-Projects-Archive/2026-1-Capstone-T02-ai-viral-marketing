@@ -12,8 +12,7 @@ import { postFastApiForm, relayJsonResponse } from "../services/fastApiClient";
 type Request = express.Request;
 type Response = express.Response;
 
-const missingUserGeminiApiKeyMessage =
-  "Gemini API 키가 설정되어 있지 않습니다. 설정에서 개인 Gemini API 키를 등록한 뒤 다시 시도해 주세요.";
+const missingUserGeminiApiKeyMessage = "설정에서 Gemini API 키를 등록해 주세요.";
 const missingApiKeyEncryptionSecretMessage =
   "사용자 Gemini API 키를 복호화할 수 없습니다. 서버의 USER_API_KEY_ENCRYPTION_SECRET 설정을 확인해 주세요.";
 

@@ -156,6 +156,10 @@ export function SettingsPage({ authStatus, onSessionExpired }: SettingsPageProps
   const busy = requestState === "loading" || requestState === "saving" || requestState === "deleting";
   const updatedAt = formatDate(settings.updatedAt);
   const verifiedAt = formatDate(settings.verifiedAt);
+  const serverFallbackEnabled = settings.serverFallbackEnabled ?? !settings.requireUserGeminiApiKey;
+  const policyMessage = settings.requireUserGeminiApiKey
+    ? "현재 개인 Gemini API 키 필수 모드입니다. 키를 등록해야 문구 생성과 이미지 분석을 사용할 수 있습니다."
+    : "현재 서버 기본 Gemini API 키 fallback이 허용되어 있습니다. 개인 키가 없으면 서버 설정 키를 사용합니다.";
 
   return (
     <article className="panel panel--workspace settings-page">
@@ -194,6 +198,11 @@ export function SettingsPage({ authStatus, onSessionExpired }: SettingsPageProps
             <span>{verifiedAt}</span>
           </div>
         ) : null}
+      </section>
+
+      <section className="settings-policy" aria-label="Gemini API 키 사용 정책">
+        <strong>{serverFallbackEnabled ? "Fallback 사용 가능" : "개인 키 필수"}</strong>
+        <p>{policyMessage}</p>
       </section>
 
       <form className="settings-form" onSubmit={(event) => void handleSave(event)}>

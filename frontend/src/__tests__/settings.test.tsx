@@ -39,6 +39,8 @@ describe("settings page", () => {
             configured: true,
             keyPreview: "abcd",
             updatedAt: "2026-05-29T00:00:00.000Z",
+            serverFallbackEnabled: true,
+            requireUserGeminiApiKey: false,
           })
         );
       }
@@ -54,6 +56,7 @@ describe("settings page", () => {
     expect(await screen.findByRole("heading", { name: "Gemini API 키 설정" })).toBeInTheDocument();
     expect(await screen.findByText("abcd")).toBeInTheDocument();
     expect(screen.getByText("등록됨")).toBeInTheDocument();
+    expect(screen.getByText("Fallback 사용 가능")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "설정" })).toHaveAttribute("aria-current", "page");
   });
 

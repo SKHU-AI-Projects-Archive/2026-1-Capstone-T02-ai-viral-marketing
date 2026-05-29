@@ -87,7 +87,15 @@ async function bootstrap(): Promise<void> {
 
   app.use(express.static(frontendDistPath));
   app.use("/api", createAuthRouter(usersCollection));
-  app.use("/api", createGenerationJobsRouter(jobsCollection, generationQueue));
+  app.use(
+    "/api",
+    createGenerationJobsRouter(
+      jobsCollection,
+      generationQueue,
+      usersCollection,
+      serverConfig.requireUserGeminiApiKey
+    )
+  );
   app.use("/api", createGenerationRouter(generationsCollection));
   app.use(
     "/api",
@@ -97,7 +105,14 @@ async function bootstrap(): Promise<void> {
       serverConfig.requireUserGeminiApiKey
     )
   );
-  app.use("/api", createSettingsRouter(usersCollection, serverConfig.userApiKeyEncryptionSecret));
+  app.use(
+    "/api",
+    createSettingsRouter(
+      usersCollection,
+      serverConfig.userApiKeyEncryptionSecret,
+      serverConfig.requireUserGeminiApiKey
+    )
+  );
 
   app.get(
     ["/generate", "/result", "/result/:id", "/generations", "/generations/:id"],

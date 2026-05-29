@@ -34,6 +34,8 @@ const INITIAL_RESULT = {
   content: "",
 };
 
+const GEMINI_KEY_SETUP_MESSAGE = "설정에서 Gemini API 키를 등록해 주세요.";
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     window.setTimeout(resolve, ms);
@@ -50,6 +52,10 @@ function describeJobStatus(job: GenerationJobResponse): string {
   return "마케팅 문구를 생성하는 중입니다.";
 }
 
+function needsGeminiKeySetup(message?: string, code?: string): boolean {
+  return code === "USER_GEMINI_API_KEY_REQUIRED" || String(message || "").includes("Gemini API 키");
+}
+
 export function useGenerationForm({ onGenerated, onSessionExpired }: UseGenerationFormOptions) {
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
   const [result, setResult] = useState(INITIAL_RESULT);
@@ -58,6 +64,7 @@ export function useGenerationForm({ onGenerated, onSessionExpired }: UseGenerati
   const [imageMessage, setImageMessage] = useState("");
   const [imageAnalysis, setImageAnalysis] = useState<ImageAnalysis | null>(null);
   const [analyzingImage, setAnalyzingImage] = useState(false);
+  const [needsGeminiKeySetupAction, setNeedsGeminiKeySetupAction] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -80,6 +87,7 @@ export function useGenerationForm({ onGenerated, onSessionExpired }: UseGenerati
     const file = event.target.files?.[0];
     setImageMessage("");
     setImageAnalysis(null);
+    setNeedsGeminiKeySetupAction(false);
 
     if (imagePreviewUrl) {
       URL.revokeObjectURL(imagePreviewUrl);
@@ -117,6 +125,7 @@ export function useGenerationForm({ onGenerated, onSessionExpired }: UseGenerati
     }
 
     setAnalyzingImage(true);
+    setNeedsGeminiKeySetupAction(false);
     setImageMessage("이미지를 분석하는 중입니다.");
 
     try {
@@ -128,6 +137,10 @@ export function useGenerationForm({ onGenerated, onSessionExpired }: UseGenerati
       }
 
       if (!response.ok) {
+        if (response.status === 403 && needsGeminiKeySetup(data.detail)) {
+          setNeedsGeminiKeySetupAction(true);
+          throw new Error(GEMINI_KEY_SETUP_MESSAGE);
+        }
         throw new Error(data.detail || "이미지 분석에 실패했습니다.");
       }
 
@@ -138,6 +151,7 @@ export function useGenerationForm({ onGenerated, onSessionExpired }: UseGenerati
       };
 
       setImageAnalysis(nextAnalysis);
+      setNeedsGeminiKeySetupAction(false);
       setForm((current) => ({
         ...current,
         keywords: nextAnalysis.recommendedKeywords.length
@@ -179,6 +193,7 @@ export function useGenerationForm({ onGenerated, onSessionExpired }: UseGenerati
       status: "loading",
       content: "마케팅 문구를 생성하는 중입니다.",
     });
+    setNeedsGeminiKeySetupAction(false);
 
     try {
       const { response, data } = await createGenerationJob(payload);
@@ -189,6 +204,10 @@ export function useGenerationForm({ onGenerated, onSessionExpired }: UseGenerati
       }
 
       if (!response.ok || !data.id) {
+        if (response.status === 403 && needsGeminiKeySetup(data.detail)) {
+          setNeedsGeminiKeySetupAction(true);
+          throw new Error(GEMINI_KEY_SETUP_MESSAGE);
+        }
         throw new Error(data.detail || "마케팅 문구 생성에 실패했습니다.");
       }
 
@@ -218,6 +237,10 @@ export function useGenerationForm({ onGenerated, onSessionExpired }: UseGenerati
         }
 
         if (job.status === "failed") {
+          if (needsGeminiKeySetup(job.error?.message, job.error?.code)) {
+            setNeedsGeminiKeySetupAction(true);
+            throw new Error(GEMINI_KEY_SETUP_MESSAGE);
+          }
           throw new Error(job.error?.message || "마케팅 문구 생성에 실패했습니다.");
         }
 
@@ -244,6 +267,7 @@ export function useGenerationForm({ onGenerated, onSessionExpired }: UseGenerati
     imageFileName: imageFile?.name ?? "",
     imageMessage,
     analyzingImage,
+    needsGeminiKeySetupAction,
     handleChange,
     handleToneChange,
     handleImageChange,
