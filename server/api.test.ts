@@ -147,7 +147,7 @@ function seedGeneration(
     _id: new ObjectId(),
     userId,
     name: "테스트 상품",
-    keywords: ["가성비", "후기"],
+    keywords: ["가성비", "분위기"],
     summary: "저장 결과 테스트",
     tone: "blog",
     imageAnalysis: null,
@@ -273,7 +273,7 @@ describe("Node API", () => {
       .send({ name: "", keywords: ["키워드"], summary: "요약", tone: "blog" })
       .expect(400);
 
-    expect(response.body.detail).toBe("상품명을 입력해 주세요.");
+    expect(response.body.detail).toBe("제품명을 입력해 주세요.");
     expect(queue.add).not.toHaveBeenCalled();
   });
 

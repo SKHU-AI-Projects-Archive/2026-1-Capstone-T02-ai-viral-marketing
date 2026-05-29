@@ -147,7 +147,7 @@ export function useGenerationForm({ onGenerated, onSessionExpired }: UseGenerati
       }));
       setImageMessage("이미지 분석 결과를 키워드와 제품 요약에 반영했습니다.");
     } catch (error) {
-      setImageMessage(error instanceof Error ? error.message : "이미지 분석 중 예기치 않은 오류가 발생했습니다.");
+      setImageMessage(error instanceof Error ? error.message : "이미지 분석 중 알 수 없는 오류가 발생했습니다.");
     } finally {
       setAnalyzingImage(false);
     }
@@ -228,11 +228,11 @@ export function useGenerationForm({ onGenerated, onSessionExpired }: UseGenerati
         await delay(attempt < 10 ? 1_000 : 2_000);
       }
 
-      throw new Error("생성 작업이 오래 걸리고 있습니다. 잠시 후 저장 글 목록에서 다시 확인해 주세요.");
+      throw new Error("생성 작업이 오래 걸리고 있습니다. 잠시 후 저장된 글 목록에서 다시 확인해 주세요.");
     } catch (error) {
       setResult({
         status: "error",
-        content: error instanceof Error ? error.message : "문구 생성 중 예기치 않은 오류가 발생했습니다.",
+        content: error instanceof Error ? error.message : "문구 생성 중 알 수 없는 오류가 발생했습니다.",
       });
     }
   }

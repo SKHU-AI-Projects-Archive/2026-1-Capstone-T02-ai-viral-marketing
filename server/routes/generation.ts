@@ -1,6 +1,7 @@
 import express = require("express");
 import { Collection, ObjectId } from "mongodb";
 
+import type {} from "../express-session";
 import { GenerationRecord } from "../generationStore";
 import {
   findGenerationForUser,
@@ -68,7 +69,7 @@ export function createGenerationRouter(generationsCollection: Collection<Generat
       console.error("[generate] Mongo insert failed:", error);
       res.status(500).json({
         generated_text: generatedText,
-        detail: "결과 저장에 실패했습니다. 생성된 텍스트는 표시됩니다.",
+        detail: "결과 저장에 실패했습니다. 생성된 텍스트는 응답에 포함됩니다.",
       });
     }
   });
@@ -91,7 +92,7 @@ export function createGenerationRouter(generationsCollection: Collection<Generat
   router.get("/generations/:id", requireAuth, async (req: Request, res: Response) => {
     const rawId = String(req.params.id || "");
     if (!ObjectId.isValid(rawId)) {
-      res.status(400).json({ detail: "잘못된 생성 결과 ID 입니다." });
+      res.status(400).json({ detail: "잘못된 생성 결과 ID입니다." });
       return;
     }
 

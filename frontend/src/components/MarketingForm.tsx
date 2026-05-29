@@ -26,9 +26,9 @@ type MarketingFormProps = {
 };
 
 const TONE_OPTIONS: { value: Tone; label: string; description: string }[] = [
-  { value: "blog", label: "블로그", description: "네이버 검색형 후기, 700~1200자" },
+  { value: "blog", label: "블로그", description: "네이버/티스토리형 리뷰 글, 700~1200자" },
   { value: "coupang_review", label: "쿠팡 리뷰", description: "실사용자 후기 톤, 100~300자" },
-  { value: "community_comment", label: "커뮤니티 댓글", description: "자연스러운 커뮤니티 댓글, 50~150자" },
+  { value: "community_comment", label: "커뮤니티 댓글", description: "자연스러운 댓글 톤, 50~150자" },
 ];
 
 export function MarketingForm({
@@ -151,7 +151,7 @@ export function MarketingForm({
         label="제품 요약"
         name="summary"
         rows={6}
-        placeholder="예: 국내 생산 스테인리스 텀블러로 보온성이 뛰어난 제품"
+        placeholder="예: 국내 생산 스테인리스 텀블러로 보온성이 좋은 제품"
         value={form.summary}
         onChange={onChange}
         maxLength={400}

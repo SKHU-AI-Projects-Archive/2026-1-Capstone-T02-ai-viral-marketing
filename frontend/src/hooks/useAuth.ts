@@ -84,4 +84,3 @@ export function useAuth() {
     markGuest,
   };
 }
-

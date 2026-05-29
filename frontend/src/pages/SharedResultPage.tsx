@@ -94,7 +94,7 @@ export function SharedResultPage({ authStatus }: { authStatus: AuthStatus }) {
 
       {copyState !== "idle" ? (
         <p className="auth-panel__message" role="status" aria-live="polite">
-          {copyState === "copied" ? "복사되었습니다." : "복사에 실패했습니다."}
+          {copyState === "copied" ? "복사했습니다." : "복사에 실패했습니다."}
         </p>
       ) : null}
 
@@ -125,7 +125,7 @@ export function SharedResultPage({ authStatus }: { authStatus: AuthStatus }) {
           <p className="generation-meta__notice">
             {meta.imageAnalysisApplied
               ? "이미지 분석 결과가 문구 생성에 반영되었습니다. 업로드한 원본 이미지는 저장하지 않습니다."
-              : "업로드한 원본 이미지는 저장하지 않습니다. 이 결과는 저장된 텍스트 정보만 보관합니다."}
+              : "업로드한 원본 이미지는 저장하지 않습니다. 이 결과에는 저장된 텍스트 정보만 보관됩니다."}
           </p>
         </section>
       ) : null}

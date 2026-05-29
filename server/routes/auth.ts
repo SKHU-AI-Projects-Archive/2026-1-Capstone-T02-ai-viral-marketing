@@ -2,6 +2,7 @@ import bcrypt = require("bcryptjs");
 import express = require("express");
 import { Collection } from "mongodb";
 
+import type {} from "../express-session";
 import type { UserRecord } from "../db";
 import { getOrCreateCsrfToken, requireCsrfToken } from "../middleware/auth";
 import { authRateLimit } from "../middleware/rateLimit";
@@ -146,4 +147,3 @@ export function createAuthRouter(usersCollection: Collection<UserRecord>): expre
 
   return router;
 }
-

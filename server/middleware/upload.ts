@@ -43,4 +43,3 @@ export function uploadProductImage(req: Request, res: Response, next: NextFuncti
     res.status(400).json({ detail: "이미지 파일 업로드 중 오류가 발생했습니다." });
   });
 }
-

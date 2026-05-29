@@ -9,7 +9,7 @@ async function getCsrfToken(): Promise<string> {
       .then(async (response) => {
         const fallbackDetail = response.ok
           ? "요청 보안 토큰 응답을 읽지 못했습니다."
-          : `요청 보안 토큰 요청이 실패했습니다. Node 인증 서버가 실행 중인지 확인해 주세요. (status: ${response.status})`;
+          : `요청 보안 토큰을 가져오지 못했습니다. Node 인증 서버가 실행 중인지 확인해 주세요. (status: ${response.status})`;
         const data = await readJson<CsrfTokenResponse>(response, {
           csrfToken: "",
           detail: fallbackDetail,

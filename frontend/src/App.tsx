@@ -75,7 +75,8 @@ export function App() {
             <span className="landing-pill">AI VIRAL MARKETING WORKSPACE</span>
             <h1 id="landing-title">AI 바이럴 마케팅 문구 생성 플랫폼</h1>
             <p>
-              상품 정보와 이미지 분석을 바탕으로 블로그, 쿠팡 리뷰, 커뮤니티 댓글에 맞는 카피를 생성하고 저장 결과까지 관리합니다.
+              제품 정보와 이미지 분석을 바탕으로 블로그, 쿠팡 리뷰, 커뮤니티 댓글에 맞는 문구를 생성하고
+              저장 결과까지 관리합니다.
             </p>
             <div className="landing-hero__actions">
               <button className="button" type="button" onClick={authUser ? openGeneratePage : () => navigate("/login")}>
@@ -109,10 +110,11 @@ export function App() {
         <section className="landing-section landing-section--split" aria-label="제품 핵심 가치">
           <div>
             <p className="auth-panel__eyebrow">Marketing OS</p>
-            <h2>반복 작성 시간을 줄이고 결과 관리를 표준화합니다</h2>
+            <h2>반복 작성 시간을 줄이고 결과 관리를 자동화합니다</h2>
           </div>
           <p>
-            생성 화면은 입력과 결과를 나란히 배치하고, 저장 목록은 톤과 키워드, 생성 시각을 함께 보여 줍니다. 팀 과제나 상품 실험처럼 여러 문구를 빠르게 비교해야 하는 흐름에 맞췄습니다.
+            생성 화면은 입력과 결과를 나란히 배치하고, 저장 목록은 톤과 키워드, 생성 시각을 함께 보여 줍니다.
+            여러 문구를 빠르게 비교해야 하는 상품 운영 흐름에 맞췄습니다.
           </p>
         </section>
 
@@ -120,7 +122,7 @@ export function App() {
           <article className="landing-feature">
             <span className="landing-feature__index">01</span>
             <h3>채널별 카피 생성</h3>
-            <p>블로그형 긴 후기, 쿠팡 리뷰형 실사용 문장, 커뮤니티 댓글형 짧은 반응을 같은 입력에서 분기합니다.</p>
+            <p>블로그형 글쓰기, 쿠팡 리뷰형 후기, 커뮤니티 댓글형 짧은 문구를 같은 입력에서 분기합니다.</p>
           </article>
           <article className="landing-feature">
             <span className="landing-feature__index">02</span>
@@ -137,10 +139,10 @@ export function App() {
         <section className="landing-cta" aria-label="현재 이용 상태">
           <div>
             <p className="auth-panel__eyebrow">Ready</p>
-            <h2>{authUser ? `${authUser.name}님, 새 마케팅 문구를 생성해 보세요` : "로그인 후 워크스페이스를 시작하세요"}</h2>
+            <h2>{authUser ? `${authUser.name}님, 새 마케팅 문구를 생성해 보세요.` : "로그인하면 작업 공간을 시작할 수 있습니다."}</h2>
             <p>
               {authUser
-                ? "생성 화면에서 새 결과를 만들고 저장 목록에서 이전 결과를 이어서 확인할 수 있습니다."
+                ? "생성 화면에서 새 결과를 만들고 저장 목록에서 이전 결과를 다시 확인할 수 있습니다."
                 : "계정을 만들면 문구 생성, 이미지 분석, 저장 결과 조회 흐름을 사용할 수 있습니다."}
             </p>
           </div>
@@ -216,7 +218,7 @@ export function App() {
               </button>
             </div>
           ) : (
-            <span className="account-menu__status">로그인 전</span>
+            <span className="account-menu__status">로그인 필요</span>
           )}
         </header>
 

@@ -41,7 +41,7 @@ describe("frontend behavior", () => {
       <MemoryRouter>
         <GeneratePage
           authStatus="authenticated"
-          authUser={{ id: "user-1", name: "테스터", email: "tester@example.com" }}
+          authUser={{ id: "user-1", name: "테스트", email: "tester@example.com" }}
           onSessionExpired={vi.fn()}
         />
       </MemoryRouter>
@@ -107,7 +107,7 @@ describe("frontend behavior", () => {
       <MemoryRouter>
         <GeneratePage
           authStatus="authenticated"
-          authUser={{ id: "user-1", name: "테스터", email: "tester@example.com" }}
+          authUser={{ id: "user-1", name: "테스트", email: "tester@example.com" }}
           onSessionExpired={vi.fn()}
         />
       </MemoryRouter>
@@ -115,7 +115,7 @@ describe("frontend behavior", () => {
 
     fireEvent.change(screen.getByLabelText("제품명"), { target: { value: "텀블러" } });
     fireEvent.change(screen.getByPlaceholderText("예: 보온, 경량, 가성비"), { target: { value: "보온, 가성비" } });
-    fireEvent.change(screen.getByPlaceholderText("예: 국내 생산 스테인리스 텀블러로 보온성이 뛰어난 제품"), {
+    fireEvent.change(screen.getByPlaceholderText("예: 국내 생산 스테인리스 텀블러로 보온성이 좋은 제품"), {
       target: { value: "보온성이 좋은 텀블러" },
     });
     fireEvent.submit(screen.getByRole("button", { name: "마케팅 문구 생성" }).closest("form")!);

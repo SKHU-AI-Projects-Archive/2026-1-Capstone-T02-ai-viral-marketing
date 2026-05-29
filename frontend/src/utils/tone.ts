@@ -7,5 +7,5 @@ export const TONE_LABELS: Record<Tone, string> = {
 };
 
 export function getToneLabel(tone: Tone): string {
-  return TONE_LABELS[tone] ?? "블로그";
+  return TONE_LABELS[tone] ?? TONE_LABELS.blog;
 }

@@ -32,4 +32,3 @@ export function createImageRouter(): express.Router {
 
   return router;
 }
-

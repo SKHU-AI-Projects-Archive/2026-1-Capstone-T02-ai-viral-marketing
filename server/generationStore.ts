@@ -79,7 +79,7 @@ export function normalizeGenerationInput(value: unknown): GenerationInput {
 
 export function validateGenerationInput(input: GenerationInput): string | null {
   if (!input.name) {
-    return "상품명을 입력해 주세요.";
+    return "제품명을 입력해 주세요.";
   }
 
   if (!input.keywords.length) {
@@ -87,7 +87,7 @@ export function validateGenerationInput(input: GenerationInput): string | null {
   }
 
   if (!input.summary) {
-    return "상품 설명을 입력해 주세요.";
+    return "제품 요약을 입력해 주세요.";
   }
 
   return null;

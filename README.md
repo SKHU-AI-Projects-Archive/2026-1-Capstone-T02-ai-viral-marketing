@@ -1,135 +1,110 @@
 # AI Viral Marketing
 
-제품 정보를 입력하고 이미지를 분석해 마케팅 문구를 생성하는 프로젝트입니다.
+제품 정보와 제품 이미지를 바탕으로 블로그 글, 쿠팡 리뷰, 커뮤니티 댓글용 마케팅 문구를 생성하고 저장 결과를 관리하는 캡스톤 프로젝트입니다.
 
-현재 구조는 다음처럼 나뉩니다.
+## 아키텍처
 
-- `backend`: FastAPI 기반 AI 서버
-- `server`: Node.js + Express 기반 인증/세션 서버
+이 저장소는 세 개의 실행 단위로 구성됩니다.
+
 - `frontend`: React + TypeScript + Vite 기반 UI
+- `server`: Node.js + Express 기반 인증/API 게이트웨이
+- `backend`: FastAPI 기반 Gemini AI 처리 서버
 
-실제 사용자는 `Node` 서버에 접속하고, `Node` 서버가 로그인/회원가입/세션을 처리한 뒤 내부적으로 `FastAPI` AI 서버를 호출합니다.
-
-## 현재 아키텍처
-
-- 브라우저 접속 주소: `http://127.0.0.1:3000`
-- 내부 AI 서버 주소: `http://127.0.0.1:8000`
-
-역할 분리:
-
-- `http://127.0.0.1:3000`
-  - 회원가입
-  - 로그인
-  - 세션 24시간 유지
-  - 로그인한 사용자만 문구 생성 페이지와 API 접근 가능
-  - React 빌드 결과물 서빙
-
-- `http://127.0.0.1:8000`
-  - 내부 AI API 제공
-  - 이미지 분석
-  - 마케팅 문구 생성
-
-중요:
-
-- 브라우저는 `8000`이 아니라 반드시 `3000`으로 접속해야 합니다.
-- `8000`은 내부 AI 서버라 웹페이지가 아니라 API/안내 메시지만 제공합니다.
-
-## 프로젝트 구조
+브라우저는 Express 서버(`http://127.0.0.1:3000`)에 접속합니다. Express 서버는 로그인, 세션, CSRF, 저장 결과 조회, 이미지 업로드 중계를 담당하고, AI 생성 작업은 Redis/BullMQ 큐에 등록합니다. 별도 Node worker가 큐의 작업을 가져와 FastAPI 서버(`http://127.0.0.1:8000`)를 호출하고, 생성 결과를 MongoDB에 저장합니다.
 
 ```text
-.
-├─ backend/
-│  ├─ ai.py
-│  ├─ main.py
-│  ├─ schemas.py
-│  ├─ vector_store.py
-│  └─ __init__.py
-├─ server/
-│  ├─ bcryptjs.d.ts
-│  ├─ express-session.d.ts
-│  └─ index.ts
-├─ frontend/
-│  ├─ public/
-│  ├─ src/
-│  ├─ index.html
-│  └─ package.json
-├─ .env
-├─ package.json
-├─ requirements.txt
-├─ tsconfig.server.json
-└─ README.md
+Browser
+  -> Express server (:3000)
+    -> MongoDB: users, sessions, generations, ai_jobs
+    -> Redis/BullMQ: generation job queue
+    -> FastAPI (:8000)
+      -> Gemini API
+      -> ChromaDB example store
+  -> Node worker
+    -> Redis/BullMQ
+    -> FastAPI
+    -> MongoDB
 ```
-
-## 기술 스택
-
-- Backend AI: FastAPI, Pydantic, httpx, python-dotenv
-- Auth Server: Node.js, Express, TypeScript, express-session, connect-mongo
-- Frontend: React, TypeScript, Vite
-- Database: MongoDB, ChromaDB
-- AI: Google Gemini API
 
 ## 주요 기능
 
-- 회원가입
-  - 사용자 정보를 MongoDB `users` DB의 `user` 컬렉션에 저장
-- 로그인
-  - 이메일/비밀번호 검증
-  - 세션 24시간 부여
-- 접근 제어
-  - 로그인해야만 문구 생성 페이지(`/generate`) 접근 가능
-  - 로그인해야만 문구 생성 API와 이미지 분석 API 호출 가능
-- 이미지 분석
-  - JPG, PNG, WEBP 업로드
-  - 최대 4MB 제한
-- 마케팅 문구 생성
-  - 제품명, 키워드, 요약, 이미지 분석 결과를 기반으로 생성
+- 회원가입, 로그인, 로그아웃
+- 24시간 세션 유지
+- CSRF 보호와 rate limit
+- 로그인 사용자 전용 문구 생성/이미지 분석 API
+- JPG, PNG, WEBP 이미지 분석, 최대 4MB
+- 비동기 생성 job 생성, 상태 조회, 실패 job 재시도
+- 생성 결과 자동 저장과 사용자별 저장 결과 격리
+- Markdown 결과 렌더링과 URL scheme 제한
+- ChromaDB 기반 이전 생성 예시 검색
+
+## 기술 스택
+
+- Frontend: React, TypeScript, Vite, React Router, React Testing Library
+- API Gateway: Node.js, Express, TypeScript, express-session, connect-mongo, helmet, express-rate-limit
+- Queue/Worker: BullMQ, Redis, Node worker
+- AI Backend: FastAPI, Pydantic, httpx, python-dotenv
+- Database: MongoDB, ChromaDB
+- AI Provider: Google Gemini API
+- Test: Vitest, Supertest, pytest
 
 ## 사전 준비
 
-- Python 3.11 이상 권장
-- Node.js 18 이상 권장
+- Node.js 18 이상
+- Python 3.11 이상
 - npm
 - MongoDB 연결 문자열
-- Gemini API Key
+- Redis
+- Gemini API key
+
+Windows 로컬 개발 환경에서는 PowerShell 기준 명령을 사용합니다.
 
 ## 환경 변수
 
-루트 `.env` 파일에 아래 값을 설정합니다.
+루트 `.env` 파일을 만들고 다음 값을 설정합니다.
 
 ```env
 GEMINI_API_KEY=your_api_key
 GEMINI_MODEL=gemini-2.5-flash
-GEMINI_TIMEOUT_SECONDS=8
+GEMINI_TIMEOUT_SECONDS=110
+GEMINI_GENERATE_TIMEOUT_SECONDS=110
+GEMINI_IMAGE_TIMEOUT_SECONDS=110
 CHROMA_DB_PATH=.chroma
 MONGO_DB=mongodb+srv://...
 SESSION_SECRET=change-this-secret
 FASTAPI_BASE_URL=http://127.0.0.1:8000
+FRONTEND_DEV_URL=http://127.0.0.1:5173
 REDIS_URL=redis://127.0.0.1:6379
 PORT=3000
 ```
 
-설명:
+주요 변수:
 
-- `GEMINI_API_KEY`: Gemini API 키
+- `GEMINI_API_KEY`: Gemini API key
 - `GEMINI_MODEL`: 사용할 Gemini 모델명
-- `GEMINI_TIMEOUT_SECONDS`: Gemini 요청 타임아웃
+- `GEMINI_TIMEOUT_SECONDS`: Gemini 요청 기본 timeout
+- `GEMINI_GENERATE_TIMEOUT_SECONDS`: 문구 생성 전용 timeout
+- `GEMINI_IMAGE_TIMEOUT_SECONDS`: 이미지 분석 전용 timeout
 - `CHROMA_DB_PATH`: ChromaDB 저장 경로
 - `MONGO_DB`: MongoDB 연결 문자열
 - `SESSION_SECRET`: 세션 서명용 비밀값
-- `FASTAPI_BASE_URL`: Node 서버가 호출할 FastAPI 주소
-- `REDIS_URL`: BullMQ 작업 큐가 사용할 Redis 주소, 기본값 `redis://127.0.0.1:6379`
-- `PORT`: Node 서버 포트, 기본값 `3000`
+- `FASTAPI_BASE_URL`: Express 서버가 호출할 FastAPI 주소
+- `FRONTEND_DEV_URL`: 개발 중 Vite dev server 주소
+- `REDIS_URL`: BullMQ 작업 큐용 Redis 주소
+- `PORT`: Express 서버 포트, 기본값 `3000`
+
+`NODE_ENV=production`에서는 기본 `SESSION_SECRET`을 사용할 수 없으며 서버 시작이 실패합니다.
 
 ## 설치
 
-### 1. Python 가상환경 생성 및 활성화
+### 1. Python 가상환경 생성
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
-PowerShell 실행 정책 오류가 나면 먼저:
+PowerShell 실행 정책 오류가 나면 현재 세션에서만 다음 명령을 실행합니다.
 
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
@@ -142,8 +117,6 @@ pip install -r requirements.txt
 ```
 
 ### 3. 루트 Node 의존성 설치
-
-인증 서버용 패키지를 설치합니다.
 
 ```powershell
 npm install
@@ -159,7 +132,7 @@ cd ..
 
 ### 5. 프론트엔드 빌드
 
-Node 인증 서버는 `frontend/dist` 정적 파일을 서빙하므로 빌드가 필요합니다.
+production 방식으로 Express 서버에서 정적 파일을 제공하려면 빌드가 필요합니다.
 
 ```powershell
 cd frontend
@@ -167,316 +140,156 @@ npm run build
 cd ..
 ```
 
-## 서버 켜는 방법
+## Redis 실행
 
-서버는 기본적으로 FastAPI, Node 인증 서버, Node worker를 켜야 합니다. 개발 중에는 `npm.cmd run dev`로 한 번에 실행할 수 있습니다.
-
-비동기 생성 작업은 Redis 기반 BullMQ 큐를 사용하므로 Redis가 먼저 실행되어 있어야 합니다.
-
-### Redis 실행
-
-로컬 Redis를 실행합니다. Windows 환경에서는 Docker 사용을 권장합니다.
+비동기 생성 작업은 Redis 기반 BullMQ를 사용합니다. Windows에서는 Docker 사용을 권장합니다.
 
 ```powershell
 docker run --name ovms-redis -p 6379:6379 -d redis:7
 ```
 
-이미 컨테이너가 있으면:
+이미 컨테이너가 있으면 다음 명령으로 시작합니다.
 
 ```powershell
 docker start ovms-redis
 ```
 
-### 터미널 1: FastAPI AI 서버 실행
+## 개발 서버 실행
+
+개발 중에는 FastAPI, Express, worker, Vite dev server를 한 번에 실행할 수 있습니다. Redis는 별도로 먼저 실행되어 있어야 합니다.
+
+```powershell
+npm.cmd run dev
+```
+
+브라우저 접속 주소:
+
+```text
+http://127.0.0.1:3000
+```
+
+주의: `http://127.0.0.1:8000`은 FastAPI 내부 AI 서버입니다. 실제 UI는 항상 `3000`으로 접속합니다.
+
+## 개별 실행
+
+### FastAPI AI 서버
 
 ```powershell
 cd C:\2026-1-Capstone-T02-ai-viral-marketing
 .\.venv\Scripts\Activate.ps1
-uvicorn backend.main:app --reload
+uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-실행 주소:
-
-```text
-http://127.0.0.1:8000
-```
-
-주의:
-
-- 이 주소는 내부 AI 서버입니다.
-- 브라우저에서 실제 페이지를 보려면 `3000`으로 접속해야 합니다.
-
-### 터미널 2: Node 인증 서버 실행
+### Express 인증/API 서버
 
 ```powershell
 cd C:\2026-1-Capstone-T02-ai-viral-marketing
 npm.cmd start
 ```
 
-실행 주소:
-
-```text
-http://127.0.0.1:3000
-```
-
-PowerShell에서 `npm start`가 꼬이거나 `npm.ps1` 관련 문제가 나면 `npm.cmd start`를 사용하면 됩니다.
-
-### 터미널 3: Node 생성 worker 실행
+### Node 생성 Worker
 
 ```powershell
 cd C:\2026-1-Capstone-T02-ai-viral-marketing
 npm.cmd run worker
 ```
 
-worker는 Redis 큐에서 생성 job을 가져와 FastAPI를 호출하고, 성공 결과를 MongoDB `generations` 컬렉션에 저장합니다.
+## 검증 명령
 
-### 개발 서버 한 번에 실행
-
-```powershell
-npm.cmd run dev
-```
-
-이 명령은 FastAPI, Node 인증 서버, Node worker, Vite 프론트엔드를 함께 실행합니다. Redis는 별도로 먼저 실행되어 있어야 합니다.
-
-### 브라우저 접속
-
-```text
-http://127.0.0.1:3000
-```
-
-## 서버 끄는 방법
-
-### 가장 일반적인 방법
-
-각 서버를 실행한 터미널에서 `Ctrl + C`
-
-- FastAPI 서버 터미널에서 `Ctrl + C`
-- Node 서버 터미널에서 `Ctrl + C`
-
-### 포트가 남아 있을 때 강제 종료
-
-#### 3000 포트(Node 서버) 종료
+### 서버 타입체크
 
 ```powershell
-Get-NetTCPConnection -LocalPort 3000 -State Listen | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+npm.cmd run typecheck:server
 ```
 
-#### 8000 포트(FastAPI 서버) 종료
+### 프론트엔드 타입체크
 
 ```powershell
-Get-NetTCPConnection -LocalPort 8000 -State Listen | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+npm.cmd --prefix frontend run typecheck
 ```
 
-## 개발 중 자주 쓰는 명령
-
-### 프론트 타입 체크
+### FastAPI 문법 확인
 
 ```powershell
-cd frontend
-npm run typecheck
-cd ..
+python -m compileall backend
 ```
 
-### 서버 타입 체크
-
-```powershell
-npm run typecheck:server
-```
-
-### 테스트 실행
-
-루트에서 Node 서버 테스트와 프론트엔드 테스트를 한 번에 실행합니다.
+### 전체 Node/Frontend 테스트
 
 ```powershell
 npm.cmd test
 ```
 
-Node 서버 API 테스트만 실행:
+### 서버 API 테스트만 실행
 
 ```powershell
 npm.cmd run test:server
 ```
 
-프론트엔드 테스트만 실행:
+### 프론트엔드 테스트만 실행
 
 ```powershell
 npm.cmd --prefix frontend run test
 ```
 
-FastAPI 테스트 실행:
+### FastAPI 테스트
 
 ```powershell
 python -m pytest
 ```
 
-Python 의존성 설치 시 `pytest`도 함께 설치됩니다.
-
-### 프론트 재빌드
-
-UI를 수정한 뒤 Node 서버에서 최신 화면을 반영하려면 다시 빌드합니다.
-
-```powershell
-cd frontend
-npm run build
-cd ..
-```
-
-## 테스트 구성
-
-핵심 테스트는 외부 서비스에 직접 연결하지 않도록 구성되어 있습니다.
-
-### Node 서버 테스트
-
-파일:
-
-- `server/api.test.ts`
-
-도구:
-
-- Vitest
-- Supertest
-
-검증 범위:
-
-- 회원가입 입력 검증
-- 로그인 실패/성공
-- 인증 없는 보호 API `401`
-- 저장 결과 사용자 격리
-
-MongoDB는 실제 서버에 연결하지 않고 테스트용 in-memory 컬렉션 fixture로 대체합니다.
-
-### FastAPI 테스트
-
-파일:
-
-- `backend/tests/test_ai_services.py`
-
-도구:
-
-- pytest
-
-검증 범위:
-
-- Gemini 응답 파싱
-- `finishReason=MAX_TOKENS` 재시도
-- 반복적인 `MAX_TOKENS` 실패 처리
-- 이미지 분석 JSON 정규화
-
-Gemini API 호출은 `monkeypatch`로 mock 처리하므로 실제 API 키나 네트워크 호출이 필요하지 않습니다.
-
-### 프론트엔드 테스트
-
-파일:
-
-- `frontend/src/__tests__/app.test.tsx`
-- `frontend/src/test/setup.ts`
-
-도구:
-
-- Vitest
-- React Testing Library
-- jsdom
-
-검증 범위:
-
-- 생성 폼 입력 검증
-- 인증 상태에 따른 보호 라우팅
-- 저장 목록 렌더링
-
-브라우저 `fetch`는 테스트 fixture 응답으로 대체합니다.
-
-### 기존 검증 명령
-
-테스트 추가 후에도 아래 명령을 함께 사용합니다.
-
-```powershell
-npm.cmd run typecheck:server
-npm.cmd --prefix frontend run typecheck
-python -m compileall backend
-```
-
 ## API 요약
 
-### Node 인증 서버 API
+### Express API
 
-- `GET /api/auth/session`
-  - 현재 로그인 상태 확인
-- `POST /api/auth/signup`
-  - 회원가입
-- `POST /api/auth/login`
-  - 로그인
-- `POST /api/auth/logout`
-  - 로그아웃
-- `POST /api/generate`
-  - 로그인 필요
-  - 기존 동기 마케팅 문구 생성 API
-- `POST /api/generation-jobs`
-  - 로그인 필요
-  - 비동기 마케팅 문구 생성 job 생성
-- `GET /api/generation-jobs/:id`
-  - 로그인 필요
-  - 생성 job 상태 조회
-- `POST /api/generation-jobs/:id/retry`
-  - 로그인 필요
-  - 실패한 생성 job 재시도
-- `POST /api/analyze-image`
-  - 로그인 필요
-  - 이미지 분석
+- `GET /api/csrf-token`: CSRF token 발급
+- `GET /api/auth/session`: 현재 로그인 상태 확인
+- `POST /api/auth/signup`: 회원가입
+- `POST /api/auth/login`: 로그인
+- `POST /api/auth/logout`: 로그아웃
+- `POST /api/generate`: 기존 동기 생성 API
+- `POST /api/generation-jobs`: 비동기 생성 job 생성
+- `GET /api/generation-jobs/:id`: 생성 job 상태 조회
+- `POST /api/generation-jobs/:id/retry`: 실패한 생성 job 재시도
+- `GET /api/generations`: 저장된 생성 결과 목록 조회
+- `GET /api/generations/:id`: 저장된 생성 결과 상세 조회
+- `POST /api/analyze-image`: 이미지 분석
 
 ### FastAPI 내부 API
 
-- `GET /health`
-  - 헬스체크
-- `POST /internal/generate`
-  - 내부 문구 생성 API
-- `POST /internal/analyze-image`
-  - 내부 이미지 분석 API
+- `GET /health`: 상태 확인
+- `POST /internal/generate`: 내부 문구 생성 API
+- `POST /internal/analyze-image`: 내부 이미지 분석 API
 
 ## 동작 흐름
 
 1. 사용자가 `http://127.0.0.1:3000`으로 접속합니다.
-2. React UI는 Node 인증 서버가 서빙합니다.
-3. 회원가입/로그인은 Node 서버에서 처리합니다.
-4. 로그인 성공 시 MongoDB 세션이 저장됩니다.
-5. 사용자가 문구 생성 또는 이미지 분석을 요청하면 Node 서버가 세션을 검사합니다.
-6. 문구 생성 요청은 Node 서버가 `ai_jobs`에 job을 만들고 Redis 큐에 등록합니다.
-7. Node worker가 Redis 큐에서 job을 가져와 FastAPI 내부 API로 전달합니다.
-8. FastAPI가 Gemini/ChromaDB 로직을 처리한 뒤 결과를 worker에 반환합니다.
-9. worker가 결과를 MongoDB `generations`에 저장하고 job 상태를 `succeeded`로 갱신합니다.
-10. 프론트엔드는 job 상태를 polling해 완료되면 저장 상세 화면으로 이동합니다.
+2. React UI는 Express 서버를 통해 제공됩니다.
+3. 회원가입 또는 로그인은 Express 서버와 MongoDB에서 처리됩니다.
+4. 사용자가 문구 생성을 요청하면 Express 서버가 `ai_jobs`에 job을 저장하고 Redis 큐에 등록합니다.
+5. Node worker가 Redis 큐에서 job을 가져와 FastAPI `/internal/generate`를 호출합니다.
+6. FastAPI는 Gemini와 ChromaDB 예시 검색을 사용해 문구를 생성합니다.
+7. worker는 생성 결과를 MongoDB `generations` 컬렉션에 저장하고 job 상태를 `succeeded`로 갱신합니다.
+8. 프론트엔드는 job 상태를 polling하다가 완료되면 저장 결과 상세 화면으로 이동합니다.
 
 ## 문제 해결
 
-### 1. `{"detail":"Not Found"}`만 보임
+### `{"detail":"Not Found"}`만 보임
 
-원인:
+FastAPI 주소인 `http://127.0.0.1:8000`에 접속했을 가능성이 높습니다. 브라우저는 `http://127.0.0.1:3000`으로 접속하세요.
 
-- `http://127.0.0.1:8000`으로 접속했을 가능성이 큽니다.
+### `EADDRINUSE: address already in use :::3000`
 
-해결:
-
-- 브라우저를 `http://127.0.0.1:3000`으로 열어야 합니다.
-
-### 2. `EADDRINUSE: address already in use :::3000`
-
-원인:
-
-- 이미 Node 서버가 `3000` 포트를 사용 중입니다.
-
-해결:
+3000 포트를 다른 프로세스가 사용 중입니다.
 
 ```powershell
 Get-NetTCPConnection -LocalPort 3000 -State Listen | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
 npm.cmd start
 ```
 
-### 3. `Frontend build not found`
+### `Frontend build not found`
 
-원인:
-
-- `frontend/dist`가 없거나 오래된 상태입니다.
-
-해결:
+`frontend/dist`가 없거나 오래된 상태입니다.
 
 ```powershell
 cd frontend
@@ -485,53 +298,32 @@ npm run build
 cd ..
 ```
 
-### 4. `로그인이 필요합니다.`
+### 로그인이 필요하다는 응답이 보임
 
-원인:
+보호된 페이지 또는 API는 로그인 후 사용할 수 있습니다. 먼저 회원가입 또는 로그인을 진행하세요.
 
-- 로그인하지 않고 보호된 페이지/API에 접근한 경우입니다.
+### CSRF token 오류
 
-해결:
+페이지를 새로고침한 뒤 다시 시도하세요. 계속 발생하면 Express 서버가 같은 세션 저장소를 사용하고 있는지 확인하세요.
 
-- 먼저 회원가입 또는 로그인 후 다시 시도합니다.
+### Redis 연결 오류
 
-### 5. `GEMINI_API_KEY` 관련 오류
+비동기 생성 job을 큐에 등록하지 못합니다. Redis 컨테이너가 실행 중인지 확인하세요.
 
-원인:
+```powershell
+docker start ovms-redis
+```
 
-- `.env`에 Gemini API 키가 없거나 잘못 설정된 경우입니다.
+### Gemini API 오류
 
-해결:
+`.env`의 `GEMINI_API_KEY`, `GEMINI_MODEL`, timeout 설정을 확인하세요.
 
-- 루트 `.env` 파일의 `GEMINI_API_KEY` 값을 확인합니다.
+### MongoDB 연결 오류
 
-### 6. `MONGO_DB` 관련 오류
-
-원인:
-
-- MongoDB 연결 문자열이 없거나 잘못된 경우입니다.
-
-해결:
-
-- `.env`의 `MONGO_DB`를 확인합니다.
-
-## 현재 기준 실행 체크리스트
-
-실행 전에 확인:
-
-- `.env` 설정 완료
-- `pip install -r requirements.txt` 완료
-- 루트 `npm install` 완료
-- `frontend/npm install` 완료
-- `frontend/npm run build` 완료
-
-실행 중 확인:
-
-- FastAPI 서버가 `8000`에서 실행 중
-- Node 서버가 `3000`에서 실행 중
-- 브라우저는 `3000`으로 접속
+`.env`의 `MONGO_DB` 연결 문자열과 네트워크 접근 권한을 확인하세요.
 
 ## 참고
 
-- `server/index.ts`는 JSX를 쓰는 파일이 아니라 Express 서버 엔트리포인트이므로 `.tsx`가 아니라 `.ts`가 맞습니다.
-- React 컴포넌트 파일은 `frontend/src/*.tsx`에 있습니다.
+- `server/index.ts`는 Express 서버 엔트리포인트이므로 `.ts` 파일이 맞습니다.
+- React 컴포넌트는 `frontend/src/**/*.tsx`에 있습니다.
+- 업로드한 원본 이미지는 저장하지 않으며, 이미지 분석 결과만 문구 생성 입력으로 사용합니다.

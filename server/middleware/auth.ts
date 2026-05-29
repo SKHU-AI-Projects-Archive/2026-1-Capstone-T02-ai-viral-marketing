@@ -2,6 +2,8 @@ import { randomBytes, timingSafeEqual } from "crypto";
 
 import express = require("express");
 
+import type {} from "../express-session";
+
 type NextFunction = express.NextFunction;
 type Request = express.Request;
 type Response = express.Response;
@@ -52,4 +54,3 @@ export function requireCsrfToken(req: Request, res: Response, next: NextFunction
 
   next();
 }
-

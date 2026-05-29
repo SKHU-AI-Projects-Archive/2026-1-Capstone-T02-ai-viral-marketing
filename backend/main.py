@@ -28,9 +28,9 @@ def healthcheck():
 @app.get("/", response_class=PlainTextResponse)
 def read_root() -> str:
     return (
-        "이 FastAPI 서버는 내부 AI API만 제공합니다.\n"
+        "FastAPI 서버는 내부 AI API만 제공합니다.\n"
         "`npm start`로 Node 서버를 실행한 뒤 http://127.0.0.1:3000 으로 접속해 주세요.\n"
-        "이 FastAPI 서버는 AI 백엔드로 계속 실행되어 있어야 합니다."
+        "FastAPI 서버는 AI 백엔드로 계속 실행되어 있어야 합니다."
     )
 
 

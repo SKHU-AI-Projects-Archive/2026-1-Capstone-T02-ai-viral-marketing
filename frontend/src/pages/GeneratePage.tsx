@@ -101,7 +101,7 @@ export function GeneratePage({ authStatus, authUser, onSessionExpired }: Generat
         <aside className="workspace-pane workspace-pane--result" aria-label="생성 상태와 최근 저장 결과">
           <ResultPanel
             status={generationForm.result.status}
-            content={generationForm.result.content || "상품 정보를 입력하고 문구를 생성하면 저장된 결과 상세 화면으로 이동합니다."}
+            content={generationForm.result.content || "제품 정보를 입력하고 문구를 생성하면 저장된 결과 상세 화면으로 이동합니다."}
           />
 
           <section className="recent-panel" aria-labelledby="recent-generations-title">

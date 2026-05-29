@@ -35,4 +35,3 @@ export function postFastApiForm(pathname: string, body: FormData): Promise<globa
     body,
   });
 }
-
