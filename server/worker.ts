@@ -8,7 +8,6 @@ async function bootstrapWorker(): Promise<void> {
     { generationsCollection, jobsCollection, usersCollection },
     {
       userApiKeyEncryptionSecret: serverConfig.userApiKeyEncryptionSecret,
-      requireUserGeminiApiKey: serverConfig.requireUserGeminiApiKey,
     }
   );
 

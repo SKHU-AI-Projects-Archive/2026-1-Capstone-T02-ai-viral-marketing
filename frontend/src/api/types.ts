@@ -98,7 +98,5 @@ export type GeminiKeySettings = {
   keyPreview?: string;
   updatedAt?: string;
   verifiedAt?: string;
-  requireUserGeminiApiKey?: boolean;
-  serverFallbackEnabled?: boolean;
   detail?: string;
 };

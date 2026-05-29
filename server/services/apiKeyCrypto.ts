@@ -26,8 +26,6 @@ export type GeminiApiKeySettingsMetadata = {
   keyPreview?: string;
   updatedAt?: Date;
   verifiedAt?: Date;
-  requireUserGeminiApiKey?: boolean;
-  serverFallbackEnabled?: boolean;
 };
 
 export function decodeApiKeyEncryptionSecret(rawSecret: string): Buffer {
@@ -115,20 +113,9 @@ export function toGeminiApiKeyPublicMetadata(record?: UserGeminiApiKey): GeminiA
   };
 }
 
-export function toGeminiApiKeySettingsMetadata(
-  record?: UserGeminiApiKey,
-  options: { requireUserGeminiApiKey?: boolean } = {}
-): GeminiApiKeySettingsMetadata {
-  const policy = {
-    requireUserGeminiApiKey: options.requireUserGeminiApiKey ?? false,
-    serverFallbackEnabled: !(options.requireUserGeminiApiKey ?? false),
-  };
-
+export function toGeminiApiKeySettingsMetadata(record?: UserGeminiApiKey): GeminiApiKeySettingsMetadata {
   if (!record) {
-    return {
-      configured: false,
-      ...policy,
-    };
+    return { configured: false };
   }
 
   return {
@@ -136,6 +123,5 @@ export function toGeminiApiKeySettingsMetadata(
     keyPreview: record.keyPreview,
     updatedAt: record.updatedAt,
     verifiedAt: record.verifiedAt,
-    ...policy,
   };
 }

@@ -99,14 +99,13 @@ def test_generate_marketing_text_passes_api_key_override(monkeypatch):
     assert seen_overrides == ["user-gemini-key"]
 
 
-def test_post_gemini_uses_api_key_override_without_global_key(monkeypatch):
+def test_post_gemini_uses_api_key_override(monkeypatch):
     seen_headers = []
 
     def fake_post(url, *, headers, json, timeout):
         seen_headers.append(headers)
         return httpx.Response(200, json=gemini_text_response("응답"), request=httpx.Request("POST", url))
 
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     get_gemini_settings.cache_clear()
     monkeypatch.setattr(gemini.httpx, "post", fake_post)
 
@@ -121,6 +120,15 @@ def test_post_gemini_uses_api_key_override_without_global_key(monkeypatch):
             "x-goog-api-key": "user-gemini-key",
         }
     ]
+
+
+def test_post_gemini_requires_api_key_override():
+    get_gemini_settings.cache_clear()
+    try:
+        with pytest.raises(ValueError, match="override is required"):
+            gemini.post_gemini({"contents": []})
+    finally:
+        get_gemini_settings.cache_clear()
 
 
 def test_analyze_product_image_normalizes_json_response(monkeypatch):

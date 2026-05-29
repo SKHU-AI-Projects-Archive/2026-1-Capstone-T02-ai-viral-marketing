@@ -18,8 +18,7 @@ const missingApiKeyEncryptionSecretMessage =
 
 export function createImageRouter(
   usersCollection: Collection<UserRecord>,
-  userApiKeyEncryptionSecret: string | null,
-  requireUserGeminiApiKey: boolean
+  userApiKeyEncryptionSecret: string | null
 ): express.Router {
   const router = express.Router();
 
@@ -38,26 +37,21 @@ export function createImageRouter(
       try {
         const user = await findUserById(usersCollection, req.session.user!.id);
         const userGeminiApiKey = user?.geminiApiKey;
-        if (!userGeminiApiKey && requireUserGeminiApiKey) {
+        if (!userGeminiApiKey) {
           res.status(403).json({ detail: missingUserGeminiApiKeyMessage });
           return;
         }
 
-        let geminiApiKeyOverride: string | undefined;
-        if (userGeminiApiKey) {
-          if (!userApiKeyEncryptionSecret) {
-            res.status(503).json({ detail: missingApiKeyEncryptionSecretMessage });
-            return;
-          }
-          geminiApiKeyOverride = decryptGeminiApiKeyForRequest(userGeminiApiKey, userApiKeyEncryptionSecret);
+        if (!userApiKeyEncryptionSecret) {
+          res.status(503).json({ detail: missingApiKeyEncryptionSecretMessage });
+          return;
         }
 
+        const geminiApiKeyOverride = decryptGeminiApiKeyForRequest(userGeminiApiKey, userApiKeyEncryptionSecret);
         const formData = new FormData();
         const blob = new Blob([new Uint8Array(req.file.buffer)], { type: req.file.mimetype });
         formData.append("file", blob, req.file.originalname);
-        if (geminiApiKeyOverride) {
-          formData.append("geminiApiKeyOverride", geminiApiKeyOverride);
-        }
+        formData.append("geminiApiKeyOverride", geminiApiKeyOverride);
 
         const upstreamResponse = await postFastApiForm("/internal/analyze-image", formData);
 

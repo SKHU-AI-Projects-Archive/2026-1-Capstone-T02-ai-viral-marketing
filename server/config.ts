@@ -20,7 +20,6 @@ export type ServerConfig = {
   frontendDevUrl: string;
   redisUrl: string;
   userApiKeyEncryptionSecret: string | null;
-  requireUserGeminiApiKey: boolean;
 };
 
 function readTrimmedEnv(name: string): string {
@@ -81,20 +80,6 @@ function parseRedisUrl(name: string, rawValue: string, defaultValue: string): st
   return value;
 }
 
-function parseBooleanEnv(name: string, defaultValue: boolean): boolean {
-  const rawValue = readTrimmedEnv(name).toLowerCase();
-  if (!rawValue) {
-    return defaultValue;
-  }
-  if (["1", "true", "yes", "on"].includes(rawValue)) {
-    return true;
-  }
-  if (["0", "false", "no", "off"].includes(rawValue)) {
-    return false;
-  }
-  throw new Error(`${name} environment variable must be true or false.`);
-}
-
 function validateUserApiKeyEncryptionSecret(rawSecret: string): void {
   const secret = rawSecret.trim();
   const decoded = /^[0-9a-fA-F]{64}$/.test(secret)
@@ -143,7 +128,6 @@ export function loadServerConfig(): ServerConfig {
     frontendDevUrl: parseHttpUrl("FRONTEND_DEV_URL", readTrimmedEnv("FRONTEND_DEV_URL"), DEFAULT_FRONTEND_DEV_URL),
     redisUrl: parseRedisUrl("REDIS_URL", readTrimmedEnv("REDIS_URL"), DEFAULT_REDIS_URL),
     userApiKeyEncryptionSecret,
-    requireUserGeminiApiKey: parseBooleanEnv("REQUIRE_USER_GEMINI_API_KEY", false),
   };
 }
 

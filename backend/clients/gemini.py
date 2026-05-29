@@ -37,9 +37,9 @@ def post_gemini(
     settings = get_gemini_settings()
     timeout_seconds = settings.image_timeout_seconds if image_analysis else settings.generate_timeout_seconds
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.model}:generateContent"
-    api_key = (api_key_override or "").strip() or settings.api_key
+    api_key = (api_key_override or "").strip()
     if not api_key:
-        raise ValueError("GEMINI_API_KEY environment variable is not set.")
+        raise ValueError("Gemini API key override is required.")
 
     try:
         response = httpx.post(
@@ -66,7 +66,7 @@ def post_gemini(
         error_message = _extract_error_message(response)
         if status_code in (401, 403):
             raise ValueError(
-                f"Gemini authentication failed. Verify GEMINI_API_KEY. Provider said: {error_message}"
+                f"Gemini authentication failed. Verify the user's Gemini API key. Provider said: {error_message}"
             ) from exc
         if status_code == 429:
             raise ValueError(

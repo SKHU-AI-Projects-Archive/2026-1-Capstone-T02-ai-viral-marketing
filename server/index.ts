@@ -92,8 +92,7 @@ async function bootstrap(): Promise<void> {
     createGenerationJobsRouter(
       jobsCollection,
       generationQueue,
-      usersCollection,
-      serverConfig.requireUserGeminiApiKey
+      usersCollection
     )
   );
   app.use("/api", createGenerationRouter(generationsCollection));
@@ -101,21 +100,19 @@ async function bootstrap(): Promise<void> {
     "/api",
     createImageRouter(
       usersCollection,
-      serverConfig.userApiKeyEncryptionSecret,
-      serverConfig.requireUserGeminiApiKey
+      serverConfig.userApiKeyEncryptionSecret
     )
   );
   app.use(
     "/api",
     createSettingsRouter(
       usersCollection,
-      serverConfig.userApiKeyEncryptionSecret,
-      serverConfig.requireUserGeminiApiKey
+      serverConfig.userApiKeyEncryptionSecret
     )
   );
 
   app.get(
-    ["/generate", "/result", "/result/:id", "/generations", "/generations/:id"],
+    ["/generate", "/settings", "/result", "/result/:id", "/generations", "/generations/:id"],
     requireAuthPage,
     (req: Request, res: Response) => {
       sendFrontendEntry(req, res);
@@ -134,6 +131,7 @@ async function bootstrap(): Promise<void> {
 
     if (
       req.path === "/generate" ||
+      req.path === "/settings" ||
       req.path === "/result" ||
       req.path === "/generations" ||
       req.path.startsWith("/result/") ||

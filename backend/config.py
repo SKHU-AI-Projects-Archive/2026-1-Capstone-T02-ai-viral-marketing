@@ -17,7 +17,6 @@ MIN_IMAGE_ANALYSIS_TIMEOUT_SECONDS = 30.0
 
 @dataclass(frozen=True)
 class GeminiSettings:
-    api_key: str | None
     model: str
     generate_timeout_seconds: float
     image_timeout_seconds: float
@@ -58,7 +57,6 @@ def get_gemini_settings() -> GeminiSettings:
     image_timeout = _parse_positive_float("GEMINI_IMAGE_TIMEOUT_SECONDS", base_timeout)
 
     return GeminiSettings(
-        api_key=_read_env("GEMINI_API_KEY") or None,
         model=_normalize_model_name(_read_env("GEMINI_MODEL") or DEFAULT_GEMINI_MODEL),
         generate_timeout_seconds=max(generate_timeout, MIN_GENERATE_TIMEOUT_SECONDS),
         image_timeout_seconds=max(image_timeout, MIN_IMAGE_ANALYSIS_TIMEOUT_SECONDS),

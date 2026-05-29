@@ -26,19 +26,11 @@ const missingUserGeminiApiKeyDetail = "설정에서 Gemini API 키를 등록해 
 export function createGenerationJobsRouter(
   jobsCollection: Collection<AiJobRecord>,
   generationQueue: Queue<GenerationQueuePayload>,
-  usersCollection?: Collection<UserRecord>,
-  requireUserGeminiApiKey = false
+  usersCollection: Collection<UserRecord>
 ): express.Router {
   const router = express.Router();
 
-  async function hasRequiredGeminiApiKey(userId: string): Promise<boolean> {
-    if (!requireUserGeminiApiKey) {
-      return true;
-    }
-    if (!usersCollection) {
-      return false;
-    }
-
+  async function hasUserGeminiApiKey(userId: string): Promise<boolean> {
     const user = await findUserById(usersCollection, userId);
     return Boolean(user?.geminiApiKey);
   }
@@ -52,10 +44,8 @@ export function createGenerationJobsRouter(
     }
 
     const sessionUser = req.session.user!;
-    if (!(await hasRequiredGeminiApiKey(sessionUser.id))) {
-      res.status(403).json({
-        detail: missingUserGeminiApiKeyDetail,
-      });
+    if (!(await hasUserGeminiApiKey(sessionUser.id))) {
+      res.status(403).json({ detail: missingUserGeminiApiKeyDetail });
       return;
     }
 
@@ -98,10 +88,8 @@ export function createGenerationJobsRouter(
       return;
     }
 
-    if (!(await hasRequiredGeminiApiKey(sessionUser.id))) {
-      res.status(403).json({
-        detail: missingUserGeminiApiKeyDetail,
-      });
+    if (!(await hasUserGeminiApiKey(sessionUser.id))) {
+      res.status(403).json({ detail: missingUserGeminiApiKeyDetail });
       return;
     }
 

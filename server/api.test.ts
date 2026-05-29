@@ -135,8 +135,7 @@ class FakeJobsCollection {
 function createTestApp(
   users = new FakeUsersCollection(),
   generations = new FakeGenerationsCollection(),
-  jobs = new FakeJobsCollection(),
-  options: { requireUserGeminiApiKey?: boolean } = {}
+  jobs = new FakeJobsCollection()
 ) {
   const app = express();
   const queue = {
@@ -156,13 +155,12 @@ function createTestApp(
     createGenerationJobsRouter(
       jobs as never,
       queue as never,
-      users as never,
-      options.requireUserGeminiApiKey ?? false
+      users as never
     )
   );
   app.use("/api", createGenerationRouter(generations as never));
-  app.use("/api", createImageRouter(users as never, TEST_API_KEY_SECRET, options.requireUserGeminiApiKey ?? false));
-  app.use("/api", createSettingsRouter(users as never, TEST_API_KEY_SECRET, options.requireUserGeminiApiKey ?? false));
+  app.use("/api", createImageRouter(users as never, TEST_API_KEY_SECRET));
+  app.use("/api", createSettingsRouter(users as never, TEST_API_KEY_SECRET));
   return { app, users, generations, jobs, queue };
 }
 
@@ -375,9 +373,7 @@ describe("Node API", () => {
   });
 
   it("rejects generation job creation when user Gemini API key is required but missing", async () => {
-    const { app, users, queue } = createTestApp(undefined, undefined, undefined, {
-      requireUserGeminiApiKey: true,
-    });
+    const { app, users, queue } = createTestApp();
     await seedUser(users, "alpha@example.com", "secret123");
 
     const agent = request.agent(app);
@@ -442,9 +438,7 @@ describe("Node API", () => {
   });
 
   it("rejects image analysis when user Gemini API key is required but missing", async () => {
-    const { app, users } = createTestApp(undefined, undefined, undefined, {
-      requireUserGeminiApiKey: true,
-    });
+    const { app, users } = createTestApp();
     await seedUser(users, "alpha@example.com", "secret123");
 
     const agent = request.agent(app);
@@ -523,7 +517,8 @@ describe("Node API", () => {
 
   it("creates generation jobs and hides them from other users", async () => {
     const { app, users, queue } = createTestApp();
-    await seedUser(users, "alpha@example.com", "secret123");
+    const alphaUser = await seedUser(users, "alpha@example.com", "secret123");
+    alphaUser.geminiApiKey = encryptGeminiApiKey("AIza-alpha-secret-key", TEST_API_KEY_SECRET);
     await seedUser(users, "beta@example.com", "secret123");
 
     const alpha = request.agent(app);
@@ -580,6 +575,7 @@ describe("Node API", () => {
   it("retries failed generation jobs", async () => {
     const { app, users, jobs, queue } = createTestApp();
     const user = await seedUser(users, "alpha@example.com", "secret123");
+    user.geminiApiKey = encryptGeminiApiKey("AIza-alpha-secret-key", TEST_API_KEY_SECRET);
     const failedJob = seedJob(jobs, user._id);
     const agent = request.agent(app);
     const csrfToken = await getCsrfToken(agent);

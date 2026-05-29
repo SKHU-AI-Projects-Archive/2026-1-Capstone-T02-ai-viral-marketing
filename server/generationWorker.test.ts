@@ -116,7 +116,6 @@ describe("processGenerationJob", () => {
 
     await processGenerationJob(collections as never, job._id.toString(), 1, {
       userApiKeyEncryptionSecret: TEST_API_KEY_SECRET,
-      requireUserGeminiApiKey: false,
     });
 
     expect(postFastApiJson).toHaveBeenCalledWith(
@@ -133,7 +132,7 @@ describe("processGenerationJob", () => {
     expect(collections.generationsCollection.records).toHaveLength(1);
   });
 
-  it("fails the job without calling FastAPI when a user key is required but missing", async () => {
+  it("fails the job without calling FastAPI when a user key is missing", async () => {
     const collections = createCollections();
     const userId = new ObjectId();
     const job = createJob(userId);
@@ -148,7 +147,6 @@ describe("processGenerationJob", () => {
 
     await processGenerationJob(collections as never, job._id.toString(), 1, {
       userApiKeyEncryptionSecret: TEST_API_KEY_SECRET,
-      requireUserGeminiApiKey: true,
     });
 
     expect(postFastApiJson).not.toHaveBeenCalled();

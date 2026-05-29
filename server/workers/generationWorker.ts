@@ -19,11 +19,9 @@ type GenerationWorkerCollections = {
 
 type GenerationWorkerOptions = {
   userApiKeyEncryptionSecret: string | null;
-  requireUserGeminiApiKey: boolean;
 };
 
-const missingUserGeminiApiKeyMessage =
-  "Gemini API 키가 설정되어 있지 않습니다. 설정에서 개인 Gemini API 키를 등록한 뒤 다시 시도해 주세요.";
+const missingUserGeminiApiKeyMessage = "설정에서 Gemini API 키를 등록해 주세요.";
 const missingApiKeyEncryptionSecretMessage =
   "사용자 Gemini API 키를 복호화할 수 없습니다. 서버의 USER_API_KEY_ENCRYPTION_SECRET 설정을 확인해 주세요.";
 
@@ -64,7 +62,7 @@ export async function processGenerationJob(
     const user = await findUserById(collections.usersCollection, jobRecord.userId);
     const userGeminiApiKey = user?.geminiApiKey;
 
-    if (!userGeminiApiKey && options.requireUserGeminiApiKey) {
+    if (!userGeminiApiKey) {
       await markJobFailed(collections.jobsCollection, jobRecord._id, {
         code: "USER_GEMINI_API_KEY_REQUIRED",
         message: missingUserGeminiApiKeyMessage,
@@ -72,22 +70,22 @@ export async function processGenerationJob(
       return;
     }
 
-    let geminiApiKeyOverride: string | undefined;
-    if (userGeminiApiKey) {
-      if (!options.userApiKeyEncryptionSecret) {
-        await markJobFailed(collections.jobsCollection, jobRecord._id, {
-          code: "USER_API_KEY_ENCRYPTION_SECRET_MISSING",
-          message: missingApiKeyEncryptionSecretMessage,
-        });
-        return;
-      }
-      geminiApiKeyOverride = decryptGeminiApiKeyForRequest(userGeminiApiKey, options.userApiKeyEncryptionSecret);
+    if (!options.userApiKeyEncryptionSecret) {
+      await markJobFailed(collections.jobsCollection, jobRecord._id, {
+        code: "USER_API_KEY_ENCRYPTION_SECRET_MISSING",
+        message: missingApiKeyEncryptionSecretMessage,
+      });
+      return;
     }
 
+    const geminiApiKeyOverride = decryptGeminiApiKeyForRequest(
+      userGeminiApiKey,
+      options.userApiKeyEncryptionSecret
+    );
     const upstreamResponse = await postFastApiJson("/internal/generate", {
       ...input,
       userId: jobRecord.userId.toString(),
-      ...(geminiApiKeyOverride ? { geminiApiKeyOverride } : {}),
+      geminiApiKeyOverride,
     });
 
     if (!upstreamResponse.ok) {
