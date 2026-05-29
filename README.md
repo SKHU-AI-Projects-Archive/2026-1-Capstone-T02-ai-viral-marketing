@@ -72,6 +72,8 @@ GEMINI_IMAGE_TIMEOUT_SECONDS=110
 CHROMA_DB_PATH=.chroma
 MONGO_DB=mongodb+srv://...
 SESSION_SECRET=change-this-secret
+USER_API_KEY_ENCRYPTION_SECRET=base64_or_hex_encoded_32_byte_secret
+REQUIRE_USER_GEMINI_API_KEY=false
 FASTAPI_BASE_URL=http://127.0.0.1:8000
 FRONTEND_DEV_URL=http://127.0.0.1:5173
 REDIS_URL=redis://127.0.0.1:6379
@@ -88,12 +90,16 @@ PORT=3000
 - `CHROMA_DB_PATH`: ChromaDB 저장 경로
 - `MONGO_DB`: MongoDB 연결 문자열
 - `SESSION_SECRET`: 세션 서명용 비밀값
+- `USER_API_KEY_ENCRYPTION_SECRET`: 사용자별 Gemini API 키 암호화용 32바이트 secret, base64 또는 64자 hex 형식
+- `REQUIRE_USER_GEMINI_API_KEY`: 사용자별 Gemini API 키를 필수로 요구할지 여부, 기본값 `false`
 - `FASTAPI_BASE_URL`: Express 서버가 호출할 FastAPI 주소
 - `FRONTEND_DEV_URL`: 개발 중 Vite dev server 주소
 - `REDIS_URL`: BullMQ 작업 큐용 Redis 주소
 - `PORT`: Express 서버 포트, 기본값 `3000`
 
 `NODE_ENV=production`에서는 기본 `SESSION_SECRET`을 사용할 수 없으며 서버 시작이 실패합니다.
+`NODE_ENV=production`에서는 `USER_API_KEY_ENCRYPTION_SECRET`도 반드시 설정해야 합니다.
+개발 환경에서 이 값이 없으면 사용자별 API 키 저장 기능은 비활성화되고 서버 로그에 설정 안내가 출력됩니다.
 
 ## 설치
 

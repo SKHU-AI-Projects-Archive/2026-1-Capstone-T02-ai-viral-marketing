@@ -3,11 +3,22 @@ import { Collection, MongoClient } from "mongodb";
 import { GenerationRecord, ensureGenerationIndexes } from "./generationStore";
 import { AiJobRecord, ensureJobIndexes } from "./jobStore";
 
+export type UserGeminiApiKey = {
+  encryptedValue: string;
+  iv: string;
+  authTag: string;
+  keyPreview: string;
+  createdAt: Date;
+  updatedAt: Date;
+  verifiedAt?: Date;
+};
+
 export type UserRecord = {
   name: string;
   email: string;
   passwordHash: string;
   createdAt: Date;
+  geminiApiKey?: UserGeminiApiKey;
 };
 
 export type AppCollections = {
