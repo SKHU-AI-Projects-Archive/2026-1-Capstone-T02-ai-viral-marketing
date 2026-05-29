@@ -95,6 +95,10 @@ export function decryptGeminiApiKey(record: UserGeminiApiKey, rawSecret: string)
   ]).toString("utf8");
 }
 
+export function decryptGeminiApiKeyForRequest(record: UserGeminiApiKey, rawSecret: string): string {
+  return decryptGeminiApiKey(record, rawSecret);
+}
+
 export function toGeminiApiKeyPublicMetadata(record?: UserGeminiApiKey): GeminiApiKeyPublicMetadata {
   if (!record) {
     return { configured: false };

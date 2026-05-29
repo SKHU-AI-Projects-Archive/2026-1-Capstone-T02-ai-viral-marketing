@@ -3,8 +3,14 @@ import { connectDatabase } from "./db";
 import { startGenerationWorker } from "./workers/generationWorker";
 
 async function bootstrapWorker(): Promise<void> {
-  const { generationsCollection, jobsCollection } = await connectDatabase(serverConfig.mongoUrl);
-  const worker = startGenerationWorker({ generationsCollection, jobsCollection });
+  const { generationsCollection, jobsCollection, usersCollection } = await connectDatabase(serverConfig.mongoUrl);
+  const worker = startGenerationWorker(
+    { generationsCollection, jobsCollection, usersCollection },
+    {
+      userApiKeyEncryptionSecret: serverConfig.userApiKeyEncryptionSecret,
+      requireUserGeminiApiKey: serverConfig.requireUserGeminiApiKey,
+    }
+  );
 
   worker.on("completed", (job) => {
     console.log(`[worker] generation job completed: ${job.data.jobId}`);

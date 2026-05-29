@@ -75,6 +75,7 @@ def generate_marketing_text(
     image_analysis: dict[str, Any] | None = None,
     tone: str = "blog",
     user_id: str | None = None,
+    api_key_override: str | None = None,
 ) -> str:
     builder = TONE_BUILDERS.get(tone)
     if builder is None:
@@ -105,7 +106,12 @@ def generate_marketing_text(
         }
 
         try:
-            generated_text = extract_generated_text(post_gemini(payload))
+            response = (
+                post_gemini(payload, api_key_override=api_key_override)
+                if api_key_override
+                else post_gemini(payload)
+            )
+            generated_text = extract_generated_text(response)
             break
         except GeminiOutputTruncatedError as exc:
             last_truncation_error = exc

@@ -31,6 +31,11 @@ class GenerateRequest(BaseModel):
     tone: Tone = Field(default="blog", description="Output tone preset")
     imageAnalysis: ImageAnalysis | None = None
     userId: str | None = Field(default=None, description="Internal user id for private example retrieval")
+    geminiApiKeyOverride: str | None = Field(
+        default=None,
+        description="Internal per-request Gemini API key override",
+        exclude=True,
+    )
 
 
 class GenerateResponse(BaseModel):

@@ -1,17 +1,31 @@
 import { Collection } from "mongodb";
 import { Worker } from "bullmq";
 
+import type { UserRecord } from "../db";
+import { findUserById } from "../db";
 import type { GenerationRecord } from "../generationStore";
 import { saveGeneratedArticle } from "../generationStore";
 import type { AiJobRecord, GenerationJobInput } from "../jobStore";
 import { findJobById, markJobFailed, markJobRunning, markJobSucceeded } from "../jobStore";
 import { generationQueueName, getRedisConnectionOptions, type GenerationQueuePayload } from "../queues/aiQueue";
+import { decryptGeminiApiKeyForRequest } from "../services/apiKeyCrypto";
 import { postFastApiJson } from "../services/fastApiClient";
 
 type GenerationWorkerCollections = {
   jobsCollection: Collection<AiJobRecord>;
   generationsCollection: Collection<GenerationRecord>;
+  usersCollection: Collection<UserRecord>;
 };
+
+type GenerationWorkerOptions = {
+  userApiKeyEncryptionSecret: string | null;
+  requireUserGeminiApiKey: boolean;
+};
+
+const missingUserGeminiApiKeyMessage =
+  "Gemini API 키가 설정되어 있지 않습니다. 설정에서 개인 Gemini API 키를 등록한 뒤 다시 시도해 주세요.";
+const missingApiKeyEncryptionSecretMessage =
+  "사용자 Gemini API 키를 복호화할 수 없습니다. 서버의 USER_API_KEY_ENCRYPTION_SECRET 설정을 확인해 주세요.";
 
 async function readUpstreamError(response: globalThis.Response): Promise<string> {
   const contentType = response.headers.get("content-type") || "";
@@ -35,7 +49,8 @@ function toGenerationInput(value: unknown): GenerationJobInput {
 export async function processGenerationJob(
   collections: GenerationWorkerCollections,
   jobId: string,
-  attemptNumber: number
+  attemptNumber: number,
+  options: GenerationWorkerOptions
 ): Promise<void> {
   const jobRecord = await findJobById(collections.jobsCollection, jobId);
   if (!jobRecord) {
@@ -46,9 +61,33 @@ export async function processGenerationJob(
 
   try {
     const input = toGenerationInput(jobRecord.input);
+    const user = await findUserById(collections.usersCollection, jobRecord.userId);
+    const userGeminiApiKey = user?.geminiApiKey;
+
+    if (!userGeminiApiKey && options.requireUserGeminiApiKey) {
+      await markJobFailed(collections.jobsCollection, jobRecord._id, {
+        code: "USER_GEMINI_API_KEY_REQUIRED",
+        message: missingUserGeminiApiKeyMessage,
+      });
+      return;
+    }
+
+    let geminiApiKeyOverride: string | undefined;
+    if (userGeminiApiKey) {
+      if (!options.userApiKeyEncryptionSecret) {
+        await markJobFailed(collections.jobsCollection, jobRecord._id, {
+          code: "USER_API_KEY_ENCRYPTION_SECRET_MISSING",
+          message: missingApiKeyEncryptionSecretMessage,
+        });
+        return;
+      }
+      geminiApiKeyOverride = decryptGeminiApiKeyForRequest(userGeminiApiKey, options.userApiKeyEncryptionSecret);
+    }
+
     const upstreamResponse = await postFastApiJson("/internal/generate", {
       ...input,
       userId: jobRecord.userId.toString(),
+      ...(geminiApiKeyOverride ? { geminiApiKeyOverride } : {}),
     });
 
     if (!upstreamResponse.ok) {
@@ -88,11 +127,14 @@ export async function processGenerationJob(
   }
 }
 
-export function startGenerationWorker(collections: GenerationWorkerCollections): Worker<GenerationQueuePayload> {
+export function startGenerationWorker(
+  collections: GenerationWorkerCollections,
+  options: GenerationWorkerOptions
+): Worker<GenerationQueuePayload> {
   return new Worker<GenerationQueuePayload>(
     generationQueueName,
     async (job) => {
-      await processGenerationJob(collections, job.data.jobId, job.attemptsMade + 1);
+      await processGenerationJob(collections, job.data.jobId, job.attemptsMade + 1, options);
     },
     {
       connection: getRedisConnectionOptions(),

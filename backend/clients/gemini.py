@@ -28,17 +28,25 @@ def _extract_error_message(response: httpx.Response) -> str:
     return response.reason_phrase or "Unknown Gemini API error."
 
 
-def post_gemini(payload: dict[str, Any], *, image_analysis: bool = False) -> dict[str, Any]:
+def post_gemini(
+    payload: dict[str, Any],
+    *,
+    image_analysis: bool = False,
+    api_key_override: str | None = None,
+) -> dict[str, Any]:
     settings = get_gemini_settings()
     timeout_seconds = settings.image_timeout_seconds if image_analysis else settings.generate_timeout_seconds
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.model}:generateContent"
+    api_key = (api_key_override or "").strip() or settings.api_key
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY environment variable is not set.")
 
     try:
         response = httpx.post(
             url,
             headers={
                 "Content-Type": "application/json",
-                "x-goog-api-key": settings.api_key,
+                "x-goog-api-key": api_key,
             },
             json=payload,
             timeout=timeout_seconds,
@@ -87,4 +95,3 @@ def extract_generated_text(data: dict[str, Any]) -> str:
     if not generated_text:
         raise ValueError("Gemini returned an empty response.")
     return generated_text
-

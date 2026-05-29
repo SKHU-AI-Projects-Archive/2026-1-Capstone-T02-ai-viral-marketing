@@ -1,4 +1,4 @@
-import { Collection, MongoClient } from "mongodb";
+import { Collection, MongoClient, ObjectId, WithId } from "mongodb";
 
 import { GenerationRecord, ensureGenerationIndexes } from "./generationStore";
 import { AiJobRecord, ensureJobIndexes } from "./jobStore";
@@ -54,4 +54,16 @@ export async function connectDatabase(mongoUrl: string): Promise<AppCollections>
     generationsCollection,
     jobsCollection,
   };
+}
+
+export async function findUserById(
+  collection: Collection<UserRecord>,
+  userId: string | ObjectId
+): Promise<WithId<UserRecord> | null> {
+  const objectId = typeof userId === "string" ? (ObjectId.isValid(userId) ? new ObjectId(userId) : null) : userId;
+  if (!objectId) {
+    return null;
+  }
+
+  return collection.findOne({ _id: objectId });
 }

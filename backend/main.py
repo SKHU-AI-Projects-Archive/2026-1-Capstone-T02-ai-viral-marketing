@@ -44,6 +44,7 @@ def generate_copy(payload: GenerateRequest) -> GenerateResponse:
             image_analysis=_model_to_dict(payload.imageAnalysis),
             tone=payload.tone,
             user_id=payload.userId,
+            api_key_override=payload.geminiApiKeyOverride,
         )
     except ValueError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
