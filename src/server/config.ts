@@ -2,7 +2,7 @@ import * as path from "path";
 
 import * as dotenv from "dotenv";
 
-dotenv.config({ path: path.join(process.cwd(), ".env") });
+dotenv.config({ path: path.join(process.cwd(), ".env"), override: true });
 
 const DEFAULT_PORT = 3000;
 const DEFAULT_SESSION_SECRET = "replace-this-session-secret";
