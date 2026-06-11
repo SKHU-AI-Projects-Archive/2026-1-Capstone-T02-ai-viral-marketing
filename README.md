@@ -2,6 +2,8 @@
 
 상품 정보와 이미지를 바탕으로 블로그 글, 쿠팡 리뷰, 커뮤니티 댓글형 마케팅 문구를 생성하고 저장 결과를 관리하는 웹 앱입니다.
 
+[바로가기](https://ai-marketing-sooty.vercel.app/)
+
 ## Architecture
 
 현재 실행 단위는 Next.js Web/API와 BullMQ worker입니다.
