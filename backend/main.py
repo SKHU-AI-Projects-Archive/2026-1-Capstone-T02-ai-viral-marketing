@@ -55,6 +55,7 @@ def generate_copy(
             keywords=payload.keywords,
             summary=payload.summary,
             image_analysis=_model_to_dict(payload.imageAnalysis),
+            blog_images=[_model_to_dict(image) for image in payload.blogImages],
             tone=payload.tone,
             user_id=payload.userId,
             api_key_override=payload.geminiApiKeyOverride,

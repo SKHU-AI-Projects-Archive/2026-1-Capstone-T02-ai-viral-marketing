@@ -17,6 +17,20 @@ export type GenerateRequest = {
   summary: string;
   tone: Tone;
   imageAnalysis?: ImageAnalysis;
+  blogImages?: BlogImage[];
+};
+
+export type BlogImage = {
+  id: string;
+  label: string;
+  description?: string;
+  placementHint?: string;
+  sourceUrl: string;
+  displayUrl: string;
+  cloudinaryPublicId: string;
+  width?: number;
+  height?: number;
+  format?: string;
 };
 
 export type JobStatus = "queued" | "running" | "succeeded" | "failed";
@@ -54,6 +68,7 @@ export type GenerationFetchResponse = {
   tone: Tone;
   generated_text: string;
   imageAnalysisApplied?: boolean;
+  blogImages?: BlogImage[];
   saveSource?: "auto";
   createdAt: string;
   updatedAt?: string;

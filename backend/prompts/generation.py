@@ -6,8 +6,19 @@ def _build_blog_prompt(
     keywords: list[str],
     summary: str,
     image_block: str,
+    blog_image_block: str,
     example_block: str,
 ) -> str:
+    image_output_rules = (
+        """- If Available blog images are provided, insert only relevant listed images using Markdown image syntax: ![alt text](URL)
+- Use only the exact image URLs listed in Available blog images.
+- Never output image://product or any image:// placeholder.
+- Do not invent image URLs. Do not repeat the same image URL.
+- If no Available blog images are provided, do not insert any image Markdown."""
+        if blog_image_block
+        else "- Do not insert image Markdown because no displayable blog image URL was provided."
+    )
+
     return f"""Write a Korean product blog post in the style of Naver / Tistory promotional reviews.
 The post must read like a real user's experience review, not an obvious ad.
 
@@ -15,16 +26,17 @@ Product name: {name}
 Keywords: {", ".join(keywords)}
 Summary: {summary}
 {image_block}
+{blog_image_block}
 {example_block}
 
 Output format (Markdown only, no code fences, no preamble):
 - Start with a single H1 line: a catchy, click-friendly title (no clickbait, no all-caps)
 - 200~300 Korean characters of intro paragraph that hooks the reader
-- Insert exactly one image right after the intro using this exact placeholder:
-  ![{name} 제품 이미지](image://product)
 - Then 2~4 H2 sections. Each section: short paragraph(s), use bullet lists when comparing or listing features
-- Optionally insert one more image between H2 sections using the same placeholder
 - End with a soft CTA paragraph (구매 / 방문 / 더 알아보기 등)
+
+Image output rules:
+{image_output_rules}
 
 Style requirements:
 - Friendly first-person review tone in Korean (존댓말, "저는", "써보니" 등)
@@ -40,6 +52,7 @@ def _build_coupang_review_prompt(
     keywords: list[str],
     summary: str,
     image_block: str,
+    blog_image_block: str,
     example_block: str,
 ) -> str:
     return f"""Write a short Korean product review in the style of Coupang product reviews.
@@ -54,8 +67,7 @@ Summary: {summary}
 Output format (Markdown allowed but minimal):
 - No title heading. Start directly with the review paragraph.
 - 1~2 short paragraphs in 존댓말, total 100~300 Korean characters.
-- Insert exactly one image at the very top using this exact placeholder:
-  ![{name}](image://product)
+- Do not insert images or image placeholders.
 - Mention realistic review elements when relevant: 배송 속도, 포장 상태, 첫인상, 사용감, 재구매 의사.
 - Light emoji is encouraged (1~4). Never use heading syntax.
 
@@ -71,6 +83,7 @@ def _build_community_comment_prompt(
     keywords: list[str],
     summary: str,
     image_block: str,
+    blog_image_block: str,
     example_block: str,
 ) -> str:
     return f"""Write a single Korean community comment that subtly promotes the product.
@@ -96,7 +109,7 @@ Style requirements:
 - Do not output keyword list verbatim; weave naturally."""
 
 
-TonePromptBuilder = Callable[[str, list[str], str, str, str], str]
+TonePromptBuilder = Callable[[str, list[str], str, str, str, str], str]
 
 TONE_BUILDERS: dict[str, TonePromptBuilder] = {
     "blog": _build_blog_prompt,

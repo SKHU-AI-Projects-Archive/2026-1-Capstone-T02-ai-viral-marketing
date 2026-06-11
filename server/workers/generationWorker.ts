@@ -4,7 +4,7 @@ import { Worker } from "bullmq";
 import type { UserRecord } from "../db";
 import { findUserById } from "../db";
 import type { GenerationRecord } from "../generationStore";
-import { saveGeneratedArticle } from "../generationStore";
+import { sanitizeGeneratedTextImages, saveGeneratedArticle } from "../generationStore";
 import type { AiJobRecord, GenerationJobInput } from "../jobStore";
 import { findJobById, markJobFailed, markJobRunning, markJobSucceeded } from "../jobStore";
 import { generationQueueName, getRedisConnectionOptions, type GenerationQueuePayload } from "../queues/aiQueue";
@@ -94,7 +94,7 @@ export async function processGenerationJob(
     }
 
     const data = (await upstreamResponse.json()) as { generated_text?: string };
-    const generatedText = data.generated_text || "";
+    const generatedText = sanitizeGeneratedTextImages(data.generated_text || "", input);
     if (!generatedText) {
       throw new Error("AI 생성 결과가 비어 있습니다.");
     }

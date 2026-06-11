@@ -14,6 +14,7 @@ import { connectDatabase } from "./db";
 import { requireAuthPage } from "./middleware/auth";
 import { createGenerationQueue } from "./queues/aiQueue";
 import { createAuthRouter } from "./routes/auth";
+import { createBlogImagesRouter } from "./routes/blogImages";
 import { createGenerationJobsRouter } from "./routes/generationJobs";
 import { createGenerationRouter } from "./routes/generation";
 import { createImageRouter } from "./routes/image";
@@ -85,7 +86,9 @@ async function bootstrap(): Promise<void> {
     })
   );
 
-  app.use(express.static(frontendDistPath));
+  if (!shouldUseFrontendDevServer()) {
+    app.use(express.static(frontendDistPath));
+  }
   app.use("/api", createAuthRouter(usersCollection));
   app.use(
     "/api",
@@ -109,6 +112,15 @@ async function bootstrap(): Promise<void> {
       usersCollection,
       serverConfig.userApiKeyEncryptionSecret
     )
+  );
+  app.use(
+    "/api",
+    createBlogImagesRouter({
+      cloudinaryCloudName: serverConfig.cloudinaryCloudName,
+      cloudinaryApiKey: serverConfig.cloudinaryApiKey,
+      cloudinaryApiSecret: serverConfig.cloudinaryApiSecret,
+      cloudinaryFolder: serverConfig.cloudinaryFolder,
+    })
   );
 
   app.get(

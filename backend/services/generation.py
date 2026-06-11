@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Any
 
 from backend.clients.gemini import GeminiOutputTruncatedError, extract_generated_text, post_gemini
@@ -27,6 +28,62 @@ def _format_image_analysis_block(image_analysis: dict[str, Any] | None) -> str:
         return ""
 
     return "\n\nImage analysis context:\n" + json.dumps(image_analysis, ensure_ascii=False, indent=2)
+
+
+def _format_blog_images_block(blog_images: list[dict[str, Any]] | None, tone: str) -> str:
+    if tone != "blog" or not blog_images:
+        return ""
+
+    lines = ["Available blog images:"]
+    for index, image in enumerate(blog_images, start=1):
+        lines.append(f"{index}. Label: {str(image.get('label', '')).strip()}")
+        description = str(image.get("description", "") or "").strip()
+        placement_hint = str(image.get("placementHint", "") or "").strip()
+        if description:
+            lines.append(f"   Description: {description}")
+        if placement_hint:
+            lines.append(f"   Placement hint: {placement_hint}")
+        lines.append(f"   URL: {str(image.get('displayUrl', '')).strip()}")
+
+    lines.append("")
+    lines.append("Image output rules:")
+    lines.append("- Use only the exact URLs listed above.")
+    lines.append("- Never output image://product or any image:// placeholder.")
+    lines.append("- Use Markdown image syntax only: ![alt text](URL).")
+    lines.append("- Include the product name and image label naturally in alt text.")
+    lines.append("- Do not force every image if it makes the post awkward.")
+    return "\n\n" + "\n".join(lines)
+
+
+_MARKDOWN_IMAGE_LINE_PATTERN = re.compile(r"^!\[[^\]]*]\(([^)\s]+)[^)]*\)\s*$", re.MULTILINE)
+_MARKDOWN_IMAGE_PATTERN = re.compile(r"!\[[^\]]*]\(([^)\s]+)[^)]*\)")
+_IMAGE_PLACEHOLDER_URL_PATTERN = re.compile(r"image://[^)\s]+")
+
+
+def _sanitize_generated_images(text: str, blog_images: list[dict[str, Any]] | None, tone: str) -> str:
+    allowed_urls = {
+        str(image.get("displayUrl", "")).strip()
+        for image in (blog_images or [])
+        if tone == "blog" and str(image.get("displayUrl", "")).strip()
+    }
+
+    def replace_line(match: re.Match[str]) -> str:
+        url = match.group(1)
+        if url.startswith("image://") or url not in allowed_urls:
+            return ""
+        return match.group(0)
+
+    def replace_inline(match: re.Match[str]) -> str:
+        url = match.group(1)
+        if url.startswith("image://") or url not in allowed_urls:
+            return ""
+        return match.group(0)
+
+    sanitized = _MARKDOWN_IMAGE_LINE_PATTERN.sub(replace_line, text)
+    sanitized = _MARKDOWN_IMAGE_PATTERN.sub(replace_inline, sanitized)
+    sanitized = _IMAGE_PLACEHOLDER_URL_PATTERN.sub("", sanitized)
+    sanitized = re.sub(r"\n{3,}", "\n\n", sanitized)
+    return sanitized.strip()
 
 
 def _generation_config_for_attempt(tone: str, attempt: int) -> dict[str, Any]:
@@ -73,6 +130,7 @@ def generate_marketing_text(
     keywords: list[str],
     summary: str,
     image_analysis: dict[str, Any] | None = None,
+    blog_images: list[dict[str, Any]] | None = None,
     tone: str = "blog",
     user_id: str | None = None,
     api_key_override: str | None = None,
@@ -86,6 +144,7 @@ def generate_marketing_text(
         keywords,
         summary,
         _format_image_analysis_block(image_analysis),
+        _format_blog_images_block(blog_images, tone),
         _format_example_block(name=name, keywords=keywords, summary=summary, tone=tone, user_id=user_id),
     )
 
@@ -117,6 +176,8 @@ def generate_marketing_text(
             last_truncation_error = exc
     else:
         raise ValueError("AI 응답이 토큰 제한으로 중간에 끊겼습니다. 다시 시도해 주세요.") from last_truncation_error
+
+    generated_text = _sanitize_generated_images(generated_text, blog_images, tone)
 
     store_generation_example(
         name=name,

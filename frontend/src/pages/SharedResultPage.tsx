@@ -122,8 +122,29 @@ export function SharedResultPage({ authStatus }: { authStatus: AuthStatus }) {
             <p>{meta.summary}</p>
           </div>
 
+          {meta.blogImages?.length ? (
+            <div className="generation-meta__block">
+              <h3>블로그 이미지</h3>
+              <div className="keyword-list">
+                {meta.blogImages.map((image) => (
+                  <a
+                    className="keyword-chip"
+                    href={image.displayUrl}
+                    key={image.id}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    {image.label}
+                  </a>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           <p className="generation-meta__notice">
-            {meta.imageAnalysisApplied
+            {meta.blogImages?.length
+              ? "블로그 이미지 URL이 생성 결과에 삽입되었습니다. 원본 이미지는 서버에 저장하지 않고 Cloudinary 공개 URL만 보관합니다."
+              : meta.imageAnalysisApplied
               ? "이미지 분석 결과가 문구 생성에 반영되었습니다. 업로드한 원본 이미지는 저장하지 않습니다."
               : "업로드한 원본 이미지는 저장하지 않습니다. 이 결과에는 저장된 텍스트 정보만 보관됩니다."}
           </p>

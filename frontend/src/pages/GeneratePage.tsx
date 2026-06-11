@@ -89,10 +89,16 @@ export function GeneratePage({ authStatus, authUser, onSessionExpired }: Generat
             imagePreviewUrl={generationForm.imagePreviewUrl}
             imageFileName={generationForm.imageFileName}
             imageMessage={generationForm.imageMessage}
+            blogImages={generationForm.blogImages}
+            blogImageMessage={generationForm.blogImageMessage}
             analyzingImage={generationForm.analyzingImage}
+            uploadingBlogImages={generationForm.uploadingBlogImages}
             onChange={generationForm.handleChange}
             onToneChange={generationForm.handleToneChange}
             onImageChange={generationForm.handleImageChange}
+            onRemoveBlogImage={generationForm.handleRemoveBlogImage}
+            onBlogImageChange={generationForm.handleBlogImageChange}
+            onBlogImageFilesChange={generationForm.handleBlogImageFilesChange}
             onAnalyzeImage={generationForm.handleAnalyzeImage}
             onSubmit={generationForm.handleSubmit}
           />

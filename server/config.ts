@@ -7,7 +7,7 @@ dotenv.config({ path: path.join(process.cwd(), ".env") });
 const DEFAULT_PORT = 3000;
 const DEFAULT_SESSION_SECRET = "replace-this-session-secret";
 const DEFAULT_FASTAPI_BASE_URL = "http://127.0.0.1:8000";
-const DEFAULT_FRONTEND_DEV_URL = "http://127.0.0.1:5173";
+const DEFAULT_FRONTEND_DEV_URL = "http://localhost:5173";
 const DEFAULT_REDIS_URL = "redis://127.0.0.1:6379";
 const DEFAULT_INTERNAL_API_SECRET = "development-internal-api-secret";
 const USER_API_KEY_ENCRYPTION_SECRET_BYTES = 32;
@@ -22,6 +22,10 @@ export type ServerConfig = {
   redisUrl: string;
   userApiKeyEncryptionSecret: string | null;
   internalApiSecret: string;
+  cloudinaryCloudName: string | null;
+  cloudinaryApiKey: string | null;
+  cloudinaryApiSecret: string | null;
+  cloudinaryFolder: string;
 };
 
 function readTrimmedEnv(name: string): string {
@@ -143,6 +147,10 @@ export function loadServerConfig(): ServerConfig {
     redisUrl: parseRedisUrl("REDIS_URL", readTrimmedEnv("REDIS_URL"), DEFAULT_REDIS_URL),
     userApiKeyEncryptionSecret,
     internalApiSecret: parseInternalApiSecret(nodeEnv),
+    cloudinaryCloudName: readTrimmedEnv("CLOUDINARY_CLOUD_NAME") || null,
+    cloudinaryApiKey: readTrimmedEnv("CLOUDINARY_API_KEY") || null,
+    cloudinaryApiSecret: readTrimmedEnv("CLOUDINARY_API_SECRET") || null,
+    cloudinaryFolder: readTrimmedEnv("CLOUDINARY_FOLDER") || "ovms/blog-images",
   };
 }
 

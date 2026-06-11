@@ -1,6 +1,6 @@
 import { ChangeEvent, FormEvent, useId } from "react";
 
-import type { Tone } from "../api/types";
+import type { BlogImage, Tone } from "../api/types";
 import { TextArea } from "./TextArea";
 import { TextInput } from "./TextInput";
 
@@ -17,10 +17,20 @@ type MarketingFormProps = {
   imagePreviewUrl: string;
   imageFileName: string;
   imageMessage: string;
+  blogImages: BlogImage[];
+  blogImageMessage: string;
   analyzingImage: boolean;
+  uploadingBlogImages: boolean;
   onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
   onToneChange: (tone: Tone) => void;
   onImageChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onRemoveBlogImage: (id: string) => void;
+  onBlogImageChange: (
+    id: string,
+    field: "label" | "description" | "placementHint",
+    value: string
+  ) => void;
+  onBlogImageFilesChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onAnalyzeImage: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 };
@@ -37,10 +47,16 @@ export function MarketingForm({
   imagePreviewUrl,
   imageFileName,
   imageMessage,
+  blogImages,
+  blogImageMessage,
   analyzingImage,
+  uploadingBlogImages,
   onChange,
   onToneChange,
   onImageChange,
+  onRemoveBlogImage,
+  onBlogImageChange,
+  onBlogImageFilesChange,
   onAnalyzeImage,
   onSubmit,
 }: MarketingFormProps) {
@@ -49,8 +65,11 @@ export function MarketingForm({
   const toneDescriptionId = useId();
   const imageHintId = useId();
   const imageMessageId = useId();
+  const blogImagesHintId = useId();
+  const blogImagesMessageId = useId();
   const activeTone = TONE_OPTIONS.find((option) => option.value === form.tone) ?? TONE_OPTIONS[0];
   const imageDescription = imageMessage ? `${imageHintId} ${imageMessageId}` : imageHintId;
+  const blogImagesDescription = blogImageMessage ? `${blogImagesHintId} ${blogImagesMessageId}` : blogImagesHintId;
 
   return (
     <form className="composer" onSubmit={onSubmit}>
@@ -133,6 +152,93 @@ export function MarketingForm({
           ) : null}
         </div>
       </div>
+
+      {form.tone === "blog" ? (
+        <section className="blog-images" aria-labelledby="blog-images-title" aria-describedby={blogImagesDescription}>
+          <div className="blog-images__header">
+            <div>
+              <h3 id="blog-images-title">블로그 이미지</h3>
+              <p className="field__hint" id={blogImagesHintId}>
+                이미지 파일을 최대 5개까지 업로드하면 Cloudinary에 저장하고 본문에 실제 이미지 링크를 삽입합니다.
+                이미지 분석에는 위 제품 이미지 1개만 사용됩니다.
+              </p>
+            </div>
+          </div>
+
+          <label className="field">
+            <span className="field__label">블로그 이미지 파일</span>
+            <input
+              className="field__control"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              disabled={uploadingBlogImages || blogImages.length >= 5}
+              onChange={onBlogImageFilesChange}
+            />
+            <span className="field__hint">
+              JPG, PNG, WEBP 형식만 가능하며 파일당 4MB 이하입니다.
+            </span>
+          </label>
+
+          {blogImages.length ? (
+            <div className="blog-images__list">
+              {blogImages.map((image, index) => (
+                <fieldset className="blog-image-card" key={image.id}>
+                  <legend>이미지 {index + 1}</legend>
+                  <TextInput
+                    label="라벨"
+                    name={`blogImageLabel-${image.id}`}
+                    type="text"
+                    placeholder="예: 대표 이미지"
+                    value={image.label}
+                    onChange={(event) => onBlogImageChange(image.id, "label", event.target.value)}
+                    maxLength={30}
+                    required
+                  />
+                  <TextInput
+                    label="이미지 설명"
+                    name={`blogImageDescription-${image.id}`}
+                    type="text"
+                    placeholder="예: 제품 패키지가 정면으로 보이는 이미지"
+                    value={image.description || ""}
+                    onChange={(event) => onBlogImageChange(image.id, "description", event.target.value)}
+                    maxLength={120}
+                  />
+                  <TextInput
+                    label="배치 힌트"
+                    name={`blogImagePlacement-${image.id}`}
+                    type="text"
+                    placeholder="예: 도입부 직후, 성분 설명 섹션"
+                    value={image.placementHint || ""}
+                    onChange={(event) => onBlogImageChange(image.id, "placementHint", event.target.value)}
+                    maxLength={80}
+                  />
+                  {image.displayUrl ? (
+                    <p className="blog-image-card__url">
+                      Cloudinary URL: <a href={image.sourceUrl || image.displayUrl} rel="noreferrer" target="_blank">{image.displayUrl}</a>
+                    </p>
+                  ) : null}
+                  <button
+                    className="result__copy blog-image-card__remove"
+                    type="button"
+                    onClick={() => onRemoveBlogImage(image.id)}
+                  >
+                    삭제
+                  </button>
+                </fieldset>
+              ))}
+            </div>
+          ) : (
+            <p className="blog-images__empty">등록된 블로그 이미지가 없습니다. 이미지 없이도 블로그 문구를 생성할 수 있습니다.</p>
+          )}
+
+          {blogImageMessage ? (
+            <p className="field__hint" id={blogImagesMessageId} role="status" aria-live="polite">
+              {blogImageMessage}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
 
       <TextInput
         label="키워드"

@@ -24,12 +24,26 @@ class ImageAnalysis(BaseModel):
     features: ImageFeatures = Field(default_factory=ImageFeatures)
 
 
+class BlogImage(BaseModel):
+    id: str
+    label: str
+    description: str | None = None
+    placementHint: str | None = None
+    sourceUrl: str
+    displayUrl: str
+    cloudinaryPublicId: str
+    width: int | None = None
+    height: int | None = None
+    format: str | None = None
+
+
 class GenerateRequest(BaseModel):
     name: str = Field(..., min_length=1, description="Product name")
     keywords: list[str] = Field(..., min_length=1, description="Keyword list")
     summary: str = Field(..., min_length=1, description="Product summary")
     tone: Tone = Field(default="blog", description="Output tone preset")
     imageAnalysis: ImageAnalysis | None = None
+    blogImages: list[BlogImage] = Field(default_factory=list)
     userId: str | None = Field(default=None, description="Internal user id for private example retrieval")
     geminiApiKeyOverride: str | None = Field(
         default=None,
